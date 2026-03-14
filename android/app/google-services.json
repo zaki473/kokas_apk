@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "926357815822",
+    "project_id": "kas-organisasi-app-e5fe2",
+    "storage_bucket": "kas-organisasi-app-e5fe2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:926357815822:android:69c6bec040830539ae325f",
+        "android_client_info": {
+          "package_name": "com.alexa.kokas"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAksQnq8w-nQyvSvtL-FUS5JDJseLcG4R0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:926357815822:android:b737dd900bcb3cbcae325f",
+        "android_client_info": {
+          "package_name": "com.example.kokas"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAksQnq8w-nQyvSvtL-FUS5JDJseLcG4R0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
