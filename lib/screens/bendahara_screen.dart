@@ -39,14 +39,15 @@ class BendaharaScreen extends StatelessWidget {
                       ),
 
                       ElevatedButton(
-                        onPressed: () {
-                          AuthService().signOut().then(
-                            (_) => Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const LoginScreen(),
-                              ),
-                            ),
+                        onPressed: () async {
+                          await AuthService().signOut();
+                          if (!context.mounted) return;
+
+                          // Menuju Login dan hapus Dashboard dari memori
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(builder: (context) => const LoginScreen()),
+                            (route) => false, 
                           );
                         },
                         child: const Text("Logout"),
@@ -152,12 +153,12 @@ class BendaharaScreen extends StatelessWidget {
                 .collection('transactions')
                 .snapshots(),
             builder: (context, snapshot) {
-              if (!snapshot.hasData)
+              if (!snapshot.hasData) {
                 return const Text(
                   "Rp 0",
                   style: TextStyle(color: Colors.white, fontSize: 30),
                 );
-
+              }
               // Logika hitung total: Masuk - Keluar
               int total = 0;
               for (var doc in snapshot.data!.docs) {
@@ -206,7 +207,7 @@ class BendaharaScreen extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.5),
               blurRadius: 10,
               offset: const Offset(0, 5),
             ),
@@ -216,7 +217,7 @@ class BendaharaScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircleAvatar(
-              backgroundColor: color.withOpacity(0.1),
+              backgroundColor: color.withValues(alpha: 0.5),
               radius: 30,
               child: Icon(icon, color: color, size: 30),
             ),

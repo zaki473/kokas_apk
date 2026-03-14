@@ -96,13 +96,16 @@ class _AnggotaScreenState extends State<AnggotaScreen> {
                       ),
 
                       ElevatedButton(
-                        onPressed: () {
-                          AuthService().signOut().then(
-                            (_) => Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const LoginScreen(),
-                              ),
+                        onPressed: () async {
+                          // Tambah async
+                          await AuthService().signOut(); // Ganti jadi await
+
+                          if (!context.mounted) return; // Cek mounted
+
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const LoginScreen(),
                             ),
                           );
                         },
@@ -222,7 +225,7 @@ class _AnggotaScreenState extends State<AnggotaScreen> {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.5),
               blurRadius: 10,
               offset: const Offset(0, 5),
             ),
@@ -232,7 +235,7 @@ class _AnggotaScreenState extends State<AnggotaScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircleAvatar(
-              backgroundColor: color.withOpacity(0.1),
+              backgroundColor: color.withValues(alpha: 0.1),
               radius: 30,
               child: Icon(icon, color: color, size: 30),
             ),

@@ -39,6 +39,7 @@ dependencies:
   firebase_auth: ^6.2.0
   intl: ^0.18.1
   shared_preferences: ^2.5.4
+  flutter_native_splash: ^2.4.0
 
 dev_dependencies:
   flutter_test:
@@ -92,3 +93,10 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+flutter_native_splash:
+  color: "#FF8F00" # Warna Amber[700] sesuai tema Bendahara kamu
+  # image: assets/images/logo.png # Pastikan file logo kamu ada di folder ini
+  android_12:
+    # image: assets/images/logo.png
+    color: "#FF8F00"
+  fullscreen: true

@@ -14,14 +14,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _namaController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  
+
   bool _isLoading = false;
   bool _obscurePassword = true;
 
   void _handleRegister() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
-      
+
       String? error = await AuthService().registerAnggota(
         _emailController.text.trim(),
         _passwordController.text.trim(),
@@ -31,14 +31,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() => _isLoading = false);
 
       if (error == null) {
+        // 1. Cek apakah widget masih ada di layar
         if (!mounted) return;
-        Navigator.pop(context);
+
+        // 2. Tampilkan SnackBar DULU sebelum Navigator.pop agar context masih valid
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Registrasi Berhasil!"), backgroundColor: Colors.green)
+          const SnackBar(
+            content: Text("Registrasi Berhasil!"),
+            backgroundColor: Colors.green,
+          ),
         );
+
+        Navigator.pop(context);
       } else {
+        if (!mounted) return;
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error), backgroundColor: Colors.red)
+          SnackBar(content: Text(error), backgroundColor: Colors.red),
         );
       }
     }
@@ -48,7 +57,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Daftar Anggota")),
-      body: SingleChildScrollView( // Agar tidak error jika keyboard muncul
+      body: SingleChildScrollView(
+        // Agar tidak error jika keyboard muncul
         padding: const EdgeInsets.all(20),
         child: Form(
           key: _formKey,
@@ -56,13 +66,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
             children: [
               TextFormField(
                 controller: _namaController,
-                decoration: const InputDecoration(labelText: "Nama Lengkap", border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: "Nama Lengkap",
+                  border: OutlineInputBorder(),
+                ),
                 validator: AppValidators.validateName,
               ),
               const SizedBox(height: 15),
               TextFormField(
                 controller: _emailController,
-                decoration: const InputDecoration(labelText: "Email", border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: "Email",
+                  border: OutlineInputBorder(),
+                ),
                 validator: AppValidators.validateEmail,
               ),
               const SizedBox(height: 15),
@@ -73,8 +89,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   labelText: "Password",
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
-                    icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                    ),
+                    onPressed: () =>
+                        setState(() => _obscurePassword = !_obscurePassword),
                   ),
                 ),
                 validator: AppValidators.validatePassword,
@@ -85,9 +106,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 height: 50,
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _handleRegister,
-                  child: _isLoading 
-                    ? const CircularProgressIndicator(color: Colors.white) 
-                    : const Text("DAFTAR"),
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text("DAFTAR"),
                 ),
               ),
             ],

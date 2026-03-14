@@ -16,7 +16,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>(); // Kunci untuk validasi form
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  
+
   bool _isLoading = false;
   bool _obscurePassword = true; // Status sembunyi password
 
@@ -35,18 +35,31 @@ class _LoginScreenState extends State<LoginScreen> {
           if (!mounted) return;
 
           if (role == 'bendahara') {
-            Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const BendaharaScreen()));
+            Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const BendaharaScreen()),
+            (route) => false, // Ini yang menghapus semua riwayat
+          );
           } else {
-            Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AnggotaScreen()));
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const AnggotaScreen()),
+            );
           }
         }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("Login Gagal: Email atau Password salah"),
-          backgroundColor: Colors.red,
-        ));
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Login Gagal: Email atau Password salah"),
+            backgroundColor: Colors.red,
+          ),
+        );
       } finally {
-        if (mounted) setState(() => _isLoading = false);
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
       }
     }
   }
@@ -54,7 +67,10 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Login")),
+      appBar: AppBar(
+        title: const Text("Login"),
+        automaticallyImplyLeading: false,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Form(
@@ -81,30 +97,40 @@ class _LoginScreenState extends State<LoginScreen> {
                   border: const OutlineInputBorder(),
                   // TOMBOL MATA
                   suffixIcon: IconButton(
-                    icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                    ),
+                    onPressed: () =>
+                        setState(() => _obscurePassword = !_obscurePassword),
                   ),
                 ),
                 validator: AppValidators.validatePassword,
               ),
               const SizedBox(height: 25),
-              
+
               // LOGIC LOADING
               SizedBox(
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton(
-                  onPressed: _isLoading ? null : _handleLogin, // Matikan tombol jika loading
-                  child: _isLoading 
-                    ? const CircularProgressIndicator(color: Colors.white) 
-                    : const Text("MASUK", style: TextStyle(fontSize: 16)),
+                  onPressed: _isLoading
+                      ? null
+                      : _handleLogin, // Matikan tombol jika loading
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text("MASUK", style: TextStyle(fontSize: 16)),
                 ),
               ),
-              
+
               TextButton(
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterScreen())),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                ),
                 child: const Text("Belum punya akun? Daftar Sekarang"),
-              )
+              ),
             ],
           ),
         ),

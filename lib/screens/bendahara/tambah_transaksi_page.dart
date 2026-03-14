@@ -39,7 +39,7 @@ class _TambahTransaksiPageState extends State<TambahTransaksiPage> {
             children: [
               // Dropdown Pilih Jenis
               DropdownButtonFormField(
-                value: _type,
+                initialValue: _type,
                 items: const [
                   DropdownMenuItem(value: 'masuk', child: Text("Uang Masuk (Kas)")),
                   DropdownMenuItem(value: 'keluar', child: Text("Uang Keluar (Belanja/Reimburse)")),
