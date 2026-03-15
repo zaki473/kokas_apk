@@ -1,4 +1,4 @@
-import 'dart:async'; // Tambahkan ini untuk Timer
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -11,14 +11,13 @@ class KasSettingPage extends StatefulWidget {
 }
 
 class _KasSettingPageState extends State<KasSettingPage> {
-  DateTime? selectedDateTime; // Diganti dari selectedDate
-  Timer? _timer; // Timer untuk update detik real-time
-  DateTime _now = DateTime.now(); // Waktu sekarang yang terus update
+  DateTime? selectedDateTime;
+  Timer? _timer;
+  DateTime _now = DateTime.now();
 
   @override
   void initState() {
     super.initState();
-    // Jalankan timer setiap 1 detik untuk mengupdate UI
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         setState(() {
@@ -30,22 +29,19 @@ class _KasSettingPageState extends State<KasSettingPage> {
 
   @override
   void dispose() {
-    _timer?.cancel(); // Hentikan timer saat keluar halaman
+    _timer?.cancel();
     super.dispose();
   }
 
-  // FUNGSI PILIH TANGGAL + JAM
   Future<void> _selectDateTime(BuildContext context) async {
-    // 1. Pilih Tanggal
     final DateTime? pickedDate = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
-      firstDate: DateTime(2024),
+      firstDate: DateTime.now(), 
       lastDate: DateTime(2030),
     );
 
     if (pickedDate != null) {
-      // 2. Pilih Jam
       if (!context.mounted) return;
       final TimeOfDay? pickedTime = await showTimePicker(
         context: context,
@@ -53,15 +49,26 @@ class _KasSettingPageState extends State<KasSettingPage> {
       );
 
       if (pickedTime != null) {
-        setState(() {
-          // Gabungkan Tanggal dan Jam
-          selectedDateTime = DateTime(
-            pickedDate.year,
-            pickedDate.month,
-            pickedDate.day,
-            pickedTime.hour,
-            pickedTime.minute,
+        // Gabungkan tanggal dan jam
+        DateTime finalDateTime = DateTime(
+          pickedDate.year,
+          pickedDate.month,
+          pickedDate.day,
+          pickedTime.hour,
+          pickedTime.minute,
+        );
+
+        // VALIDASI: Jangan biarkan memilih waktu yang sudah lewat dari SEKARANG
+        if (finalDateTime.isBefore(DateTime.now())) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Waktu tidak boleh di masa lalu!"), backgroundColor: Colors.orange),
           );
+          return;
+        }
+
+        setState(() {
+          selectedDateTime = finalDateTime;
         });
       }
     }
@@ -70,108 +77,109 @@ class _KasSettingPageState extends State<KasSettingPage> {
   void _saveSettings() async {
     if (selectedDateTime == null) return;
 
-    final batch = FirebaseFirestore.instance.batch();
+    try {
+      // Tambahkan konfirmasi sebelum simpan
+      final batch = FirebaseFirestore.instance.batch();
 
-    var settingRef = FirebaseFirestore.instance.collection('settings').doc('kas_deadline');
-    batch.set(settingRef, {
-      'tanggal': selectedDateTime, // Simpan DateTime lengkap (Tgl + Jam)
-      'last_updated': DateTime.now(),
-    });
+      var settingRef = FirebaseFirestore.instance.collection('settings').doc('kas_deadline');
+      batch.set(settingRef, {
+        'tanggal': Timestamp.fromDate(selectedDateTime!), // Simpan sebagai Timestamp resmi
+        'last_updated': FieldValue.serverTimestamp(),
+      });
 
-    var historyRef = FirebaseFirestore.instance.collection('kas_history').doc();
-    batch.set(historyRef, {
-      'tanggal_kas': selectedDateTime,
-      'dibuat_pada': DateTime.now(),
-    });
+      await batch.commit();
 
-    await batch.commit();
-
-    if (!mounted) return;
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Deadline Berhasil Diatur!")),
-    );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Deadline Berhasil Diupdate!"), backgroundColor: Colors.green),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Gagal: $e")),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Setting Kas & Waktu"),
-        backgroundColor: Colors.amber[700],
-      ),
+      appBar: AppBar(title: const Text("Setting Kas"), backgroundColor: Colors.amber[700]),
       body: Column(
         children: [
-          Padding(
+          // Tampilan Jam Sekarang
+          Container(
             padding: const EdgeInsets.all(20),
             child: Column(
               children: [
-                // TAMPILAN WAKTU REAL-TIME SEKARANG
+                const Text("Waktu HP Kamu Sekarang:"),
                 Text(
-                  "Waktu Sekarang: ${DateFormat('HH:mm:ss').format(_now)}",
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue),
+                  DateFormat('HH:mm:ss').format(_now),
+                  style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 20),
-                const Text("Tentukan Batas Akhir Pembayaran Kas:", style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
-                
                 ListTile(
-                  tileColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    side: const BorderSide(color: Colors.amber),
-                  ),
-                  title: Text(
-                    selectedDateTime == null
-                        ? "Pilih Tanggal & Jam"
-                        : DateFormat('dd MMMM yyyy, HH:mm', 'id').format(selectedDateTime!),
-                  ),
-                  trailing: const Icon(Icons.access_time),
+                  tileColor: Colors.amber[50],
+                  title: Text(selectedDateTime == null 
+                    ? "Pilih Deadline" 
+                    : DateFormat('dd MMM yyyy, HH:mm', 'id').format(selectedDateTime!)),
+                  trailing: const Icon(Icons.edit_calendar),
                   onTap: () => _selectDateTime(context),
                 ),
-                
-                const SizedBox(height: 15),
+                const SizedBox(height: 10),
                 ElevatedButton(
                   onPressed: selectedDateTime != null ? _saveSettings : null,
-                  child: const Text("SIMPAN & UMUMKAN"),
-                ),
+                  child: const Text("SIMPAN DEADLINE"),
+                )
               ],
             ),
           ),
-          const Divider(thickness: 2),
-          const Text("Status Deadline Aktif", style: TextStyle(fontWeight: FontWeight.bold)),
-          
-          // STREAM UNTUK CEK DEADLINE SECARA REAL-TIME
-          StreamBuilder<DocumentSnapshot>(
-            stream: FirebaseFirestore.instance.collection('settings').doc('kas_deadline').snapshots(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData || !snapshot.data!.exists) return const SizedBox();
-              
-              var data = snapshot.data!.data() as Map<String, dynamic>;
-              DateTime deadline = (data['tanggal'] as Timestamp).toDate();
 
-              // LOGIKA HILANG OTOMATIS: Jika waktu sekarang sudah melewati deadline
-              if (_now.isAfter(deadline)) {
-                return const Padding(
-                  padding: EdgeInsets.all(20.0),
-                  child: Text("DEADLINE SUDAH BERAKHIR", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          const Divider(),
+
+          // Monitor Real-time dari Firestore
+          Expanded(
+            child: StreamBuilder<DocumentSnapshot>(
+              stream: FirebaseFirestore.instance.collection('settings').doc('kas_deadline').snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData || !snapshot.data!.exists) {
+                  return const Center(child: Text("Belum ada deadline aktif."));
+                }
+
+                var data = snapshot.data!.data() as Map<String, dynamic>;
+                // .toDate().toLocal() sangat penting untuk menghindari selisih jam timezone
+                DateTime deadline = (data['tanggal'] as Timestamp).toDate().toLocal();
+
+                // Perbandingan: kita bulankan ke detik agar lebih adil
+                bool isOver = _now.isAfter(deadline);
+
+                if (isOver) {
+                  return const Center(
+                    child: Text("DEADLINE TELAH BERAKHIR", 
+                      style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 18)),
+                  );
+                }
+
+                Duration sisa = deadline.difference(_now);
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text("DEADLINE AKTIF:"),
+                      Text(DateFormat('dd MMMM yyyy, HH:mm', 'id').format(deadline), 
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 20),
+                      const Text("SISA WAKTU:"),
+                      Text(
+                        "${sisa.inDays} Hari ${sisa.inHours % 24} Jam ${sisa.inMinutes % 60} Menit ${sisa.inSeconds % 60} Detik",
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 20, color: Colors.green, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
                 );
-              }
-
-              // Hitung Sisa Waktu
-              Duration sisa = deadline.difference(_now);
-              String sisaWaktu = "${sisa.inDays}h ${sisa.inHours % 24}m ${sisa.inMinutes % 60}s ${sisa.inSeconds % 60}s";
-
-              return Card(
-                color: Colors.green[50],
-                margin: const EdgeInsets.all(15),
-                child: ListTile(
-                  title: Text("Sisa Waktu: $sisaWaktu", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
-                  subtitle: Text("Sampai: ${DateFormat('dd MMM yyyy, HH:mm:ss').format(deadline)}"),
-                ),
-              );
-            },
-          ),
+              },
+            ),
+          )
         ],
       ),
     );
