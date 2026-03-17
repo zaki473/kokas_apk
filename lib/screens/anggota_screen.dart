@@ -1,6 +1,6 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Tambahkan ini
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import '../services/auth_service.dart';
@@ -8,7 +8,7 @@ import 'login_screen.dart';
 import 'anggota/cash_flow_page.dart';
 import 'anggota/reimburse_request_page.dart';
 import 'anggota/notification_page.dart';
-import 'anggota/bayar_kas_page.dart'; // Pastikan file ini sudah dibuat
+import 'anggota/DaftarTagihanPage.dart';
 
 class AnggotaScreen extends StatefulWidget {
   const AnggotaScreen({super.key});
@@ -18,29 +18,8 @@ class AnggotaScreen extends StatefulWidget {
 }
 
 class _AnggotaScreenState extends State<AnggotaScreen> {
-  Timer? _timer;
-  DateTime _now = DateTime.now();
+  final String _uid = FirebaseAuth.instance.currentUser?.uid ?? "";
 
-  @override
-  void initState() {
-    super.initState();
-    // Timer untuk mengupdate detik real-time agar countdown berjalan lancar
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {
-          _now = DateTime.now();
-        });
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  // Fungsi untuk membuka notifikasi dan mereset tanda merah
   void _openNotif() async {
     final p = await SharedPreferences.getInstance();
     await p.setInt('last_read', DateTime.now().millisecondsSinceEpoch);
@@ -48,7 +27,7 @@ class _AnggotaScreenState extends State<AnggotaScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const NotificationPage()),
-    ).then((_) => setState(() {})); // Refresh UI saat kembali agar titik merah hilang
+    ).then((_) => setState(() {})); 
   }
 
   @override
@@ -60,7 +39,6 @@ class _AnggotaScreenState extends State<AnggotaScreen> {
         backgroundColor: Colors.blue[700],
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
-          // LONCENG NOTIFIKASI DENGAN TITIK MERAH
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('announcements')
@@ -79,19 +57,11 @@ class _AnggotaScreenState extends State<AnggotaScreen> {
                   }
                   return Stack(
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.notifications),
-                        onPressed: _openNotif,
-                      ),
+                      IconButton(icon: const Icon(Icons.notifications), onPressed: _openNotif),
                       if (hasNewNotif)
                         Positioned(
-                          right: 12,
-                          top: 12,
-                          child: Container(
-                            width: 10,
-                            height: 10,
-                            decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                          ),
+                          right: 12, top: 12,
+                          child: Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle)),
                         ),
                     ],
                   );
@@ -99,20 +69,18 @@ class _AnggotaScreenState extends State<AnggotaScreen> {
               );
             },
           ),
-          // TOMBOL LOGOUT DENGAN KONFIRMASI
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => _showLogoutDialog(),
-          ),
+          IconButton(icon: const Icon(Icons.logout), onPressed: () => _showLogoutDialog()),
         ],
       ),
       body: Column(
         children: [
-          _buildBalanceCard(),    // Kartu Saldo Biru
-          _buildDeadlineBanner(), // Banner Countdown yang bisa hilang otomatis
+          _buildBalanceCard(),    
           
+          // REMINDER BAYAR KAS (Diletakkan di atas menu)
+          _buildPaymentReminder(), 
+
           const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text("Menu Utama", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -127,7 +95,7 @@ class _AnggotaScreenState extends State<AnggotaScreen> {
               crossAxisSpacing: 15,
               children: [
                 _box(context, "Cash Flow", Icons.swap_vert, Colors.blue, const CashFlowPage()),
-                _box(context, "Bayar Kas", Icons.account_balance_wallet, Colors.orange, const BayarKasPage()),
+                _box(context, "Bayar Kas", Icons.account_balance_wallet, Colors.orange, const DaftarTagihanPage()),
                 _box(context, "Ajukan Reimburse", Icons.request_quote, Colors.green, const ReimburseRequestPage()),
               ],
             ),
@@ -137,7 +105,78 @@ class _AnggotaScreenState extends State<AnggotaScreen> {
     );
   }
 
-  // WIDGET SALDO KAS REAL-TIME
+  // --- WIDGET REMINDER PEMBAYARAN KAS ---
+  Widget _buildPaymentReminder() {
+    return StreamBuilder<QuerySnapshot>(
+      // Mengambil semua daftar tagihan
+      stream: FirebaseFirestore.instance.collection('kas_deadline').snapshots(),
+      builder: (context, tagihanSnap) {
+        if (!tagihanSnap.hasData || tagihanSnap.data!.docs.isEmpty) return const SizedBox();
+
+        return StreamBuilder<QuerySnapshot>(
+          // Mengambil data pembayaran user ini yang sudah disetujui
+          stream: FirebaseFirestore.instance
+              .collection('pembayaran')
+              .where('uid_pengirim', isEqualTo: _uid)
+              .where('status', isEqualTo: 'disetujui')
+              .snapshots(),
+          builder: (context, bayarSnap) {
+            if (!bayarSnap.hasData) return const SizedBox();
+
+            // Mendapatkan daftar bulan yang sudah dibayar (Lunas)
+            List<String> bulanLunas = bayarSnap.data!.docs.map((d) => d['bulan'].toString()).toList();
+
+            // Memfilter tagihan mana saja yang belum ada di daftar lunas
+            List<QueryDocumentSnapshot> tagihanBelumLunas = tagihanSnap.data!.docs.where((doc) {
+              return !bulanLunas.contains(doc['bulan']);
+            }).toList();
+
+            // Jika semua tagihan sudah lunas, banner tidak muncul
+            if (tagihanBelumLunas.isEmpty) return const SizedBox();
+
+            return Container(
+              margin: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              padding: const EdgeInsets.all(15),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [Colors.orange.shade400, Colors.orange.shade700]),
+                borderRadius: BorderRadius.circular(15),
+                boxShadow: [BoxShadow(color: Colors.orange.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5))],
+              ),
+              child: InkWell(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DaftarTagihanPage())),
+                child: Row(
+                  children: [
+                    const CircleAvatar(
+                      backgroundColor: Colors.white24,
+                      child: Icon(Icons.priority_high, color: Colors.white),
+                    ),
+                    const SizedBox(width: 15),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "PENTING: Tagihan Kas Menunggu",
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                          Text(
+                            "Kamu punya ${tagihanBelumLunas.length} tagihan yang belum lunas. Klik untuk bayar sekarang!",
+                            style: const TextStyle(color: Colors.white, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildBalanceCard() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('transactions').snapshots(),
@@ -173,51 +212,6 @@ class _AnggotaScreenState extends State<AnggotaScreen> {
     );
   }
 
-  // WIDGET BANNER COUNTDOWN (Hanya muncul jika belum expired)
-  Widget _buildDeadlineBanner() {
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('settings').doc('kas_deadline').snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || !snapshot.data!.exists) return const SizedBox();
-        
-        var data = snapshot.data!.data() as Map<String, dynamic>;
-        DateTime deadline = (data['tanggal'] as Timestamp).toDate();
-
-        // Jika waktu sudah lewat, banner hilang otomatis secara real-time
-        if (_now.isAfter(deadline)) return const SizedBox();
-
-        Duration sisa = deadline.difference(_now);
-        String countdownText = "${sisa.inDays}h ${sisa.inHours % 24}j ${sisa.inMinutes % 60}m ${sisa.inSeconds % 60}d";
-
-        return Container(
-          margin: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-          padding: const EdgeInsets.all(15),
-          decoration: BoxDecoration(
-            color: Colors.orange[50],
-            borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: Colors.orange.shade300),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.timer_outlined, color: Colors.orange),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text("Batas Terakhir Bayar Kas:", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                    Text(countdownText, style: const TextStyle(fontSize: 16, color: Colors.orange, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  // WIDGET KOTAK MENU
   Widget _box(BuildContext context, String title, IconData icon, Color color, Widget page) {
     return InkWell(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => page)),
@@ -245,7 +239,6 @@ class _AnggotaScreenState extends State<AnggotaScreen> {
     );
   }
 
-  // FUNGSI LOGOUT
   void _showLogoutDialog() {
     showDialog(
       context: context,
@@ -258,11 +251,7 @@ class _AnggotaScreenState extends State<AnggotaScreen> {
             onPressed: () async {
               await AuthService().signOut();
               if (!mounted) return;
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-                (route) => false,
-              );
+              Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false);
             },
             child: const Text("Logout"),
           ),

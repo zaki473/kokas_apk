@@ -6,9 +6,8 @@ import 'package:intl/date_symbol_data_local.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Inisialisasi Firebase & Date di sini sudah benar
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  await initializeDateFormatting('id', null); 
+  await initializeDateFormatting('id', null);
   runApp(const MyApp());
 }
 
@@ -19,13 +18,15 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      // Kita gunakan FutureBuilder untuk mengecek apakah aplikasi sudah siap atau belum
-      home: const SplashScreenWrapper(), 
+      theme: ThemeData(
+        useMaterial3: true,
+        primarySwatch: Colors.amber,
+      ),
+      home: const SplashScreenWrapper(),
     );
   }
 }
 
-// Widget tambahan untuk menangani Loading sebelum masuk ke Login
 class SplashScreenWrapper extends StatefulWidget {
   const SplashScreenWrapper({super.key});
 
@@ -33,50 +34,141 @@ class SplashScreenWrapper extends StatefulWidget {
   State<SplashScreenWrapper> createState() => _SplashScreenWrapperState();
 }
 
-class _SplashScreenWrapperState extends State<SplashScreenWrapper> {
+class _SplashScreenWrapperState extends State<SplashScreenWrapper> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fadeAnimation;
+
   @override
   void initState() {
     super.initState();
+    
+    // Inisialisasi Animasi Fade In
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
+    );
+
+    _controller.forward();
     _navigateToLogin();
   }
 
-  Future<void> _navigateToLogin() async { 
-  await Future.delayed(const Duration(seconds: 2));
-  
+  Future<void> _navigateToLogin() async {
+  await Future.delayed(const Duration(seconds: 3));
   if (!mounted) return;
-  
+
   Navigator.pushReplacement(
     context,
-    MaterialPageRoute(builder: (context) => const LoginScreen()),
+    PageRouteBuilder(
+      pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        // Animasi Fade
+        var fade = CurvedAnimation(parent: animation, curve: Curves.easeIn);
+        
+        // Animasi Slide (naik sedikit dari bawah ke atas)
+        var offset = Tween<Offset>(
+          begin: const Offset(0, 0.05), // Mulai dari 5% di bawah
+          end: Offset.zero,
+        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
+
+        return FadeTransition(
+          opacity: fade,
+          child: SlideTransition(position: offset, child: child),
+        );
+      },
+      transitionDuration: const Duration(milliseconds: 1500), // 1 detik agar sangat smooth
+    ),
   );
 }
 
   @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Warna background disamakan dengan tema Bendahara (Amber)
-      backgroundColor: Colors.amber[700],
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Bisa diganti Ikon atau Image.asset logo kamu
-            const Icon(Icons.account_balance_wallet, size: 80, color: Colors.white),
-            const SizedBox(height: 24),
-            const CircularProgressIndicator(
-              color: Colors.white,
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              "KOKAS",
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 2,
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        // Menggunakan Gradient agar terlihat lebih modern
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.amber[800]!,
+              Colors.orange[700]!,
+            ],
+          ),
+        ),
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Logo dengan bayangan halus
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.account_balance_wallet,
+                  size: 100,
+                  color: Colors.white,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 24),
+              // Nama Aplikasi
+              const Text(
+                "KOKAS",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 4,
+                  shadows: [
+                    Shadow(
+                      blurRadius: 10.0,
+                      color: Colors.black26,
+                      offset: Offset(2, 2),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                "Kelola Kas Jadi Mudah",
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 60),
+              // Loading indicator yang lebih minimalis
+              const SizedBox(
+                width: 40,
+                height: 40,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

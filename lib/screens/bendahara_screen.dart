@@ -11,6 +11,7 @@ import 'bendahara/pengumuman_page.dart';
 import 'bendahara/reimburse_page.dart';
 import 'bendahara/tambah_transaksi_page.dart';
 import 'bendahara/verifikasi_bayar_page.dart';
+import 'bendahara/StatusAnggotaPage.dart';
 
 class BendaharaScreen extends StatelessWidget {
   const BendaharaScreen({super.key});
@@ -93,6 +94,13 @@ class BendaharaScreen extends StatelessWidget {
                   icon: Icons.payments,
                   color: Colors.green,
                   page: const ReimbursePage(),
+                ),
+                _buildMenuContainer(
+                  context,
+                  title: "Status Anggota",
+                  icon: Icons.group_off,
+                  color: const Color.fromARGB(255, 10, 10, 10),
+                  page: const StatusAnggotaPage(),
                 ),
               ],
             ),
