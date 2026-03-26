@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; 
 import '../services/auth_service.dart';
 import '../utils/validators.dart';
 import 'register_screen.dart';
@@ -19,14 +20,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isLoading = false;
   bool _obscurePassword = true;
-  
-  // Variabel untuk mengontrol kemunculan konten agar smooth
   bool _isContentVisible = false;
 
   @override
   void initState() {
     super.initState();
-    // Beri sedikit delay agar transisi dari Splash selesai dulu baru konten muncul
     Future.delayed(const Duration(milliseconds: 400), () {
       if (mounted) {
         setState(() {
@@ -34,6 +32,30 @@ class _LoginScreenState extends State<LoginScreen> {
         });
       }
     });
+  }
+
+  // FUNGSI BARU: Menampilkan Pop-up Konfirmasi Keluar
+  void _showExitDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: const Text("Keluar Aplikasi?"),
+        content: const Text("Apakah Anda yakin ingin keluar dari aplikasi KOKAS?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context), // Menutup pop-up saja
+            child: const Text("BATAL", style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () {
+              SystemNavigator.pop(); // Menutup aplikasi total
+            },
+            child: Text("KELUAR", style: TextStyle(color: Colors.amber[800], fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _handleLogin() async {
@@ -49,7 +71,6 @@ class _LoginScreenState extends State<LoginScreen> {
           String role = userData['role'];
           if (!mounted) return;
 
-          // Gunakan PageRouteBuilder juga saat pindah ke Dashboard agar tetap smooth
           Widget destination = (role == 'bendahara') 
               ? const BendaharaScreen() 
               : const AnggotaScreen();
@@ -85,14 +106,12 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      // AppBar dibuang atau dibuat transparan agar transisi lebih clean
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.transparent,
         foregroundColor: Colors.black,
         automaticallyImplyLeading: false,
       ),
-      // AnimatedOpacity membuat konten muncul pelan-pelan
       body: AnimatedOpacity(
         duration: const Duration(milliseconds: 600),
         opacity: _isContentVisible ? 1.0 : 0.0,
@@ -105,7 +124,7 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 const SizedBox(height: 40),
                 const Text(
-                "Selamat Datang di KOKAS!",
+                  "Selamat Datang di KOKAS!",
                   style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                 ),
                 const Text(
@@ -114,7 +133,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 40),
                 
-                // Input Email
                 TextFormField(
                   controller: _emailController,
                   decoration: InputDecoration(
@@ -126,7 +144,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 20),
                 
-                // Input Password
                 TextFormField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
@@ -143,7 +160,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 30),
 
-                // Tombol Login
                 SizedBox(
                   width: double.infinity,
                   height: 55,
@@ -164,6 +180,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 
                 const SizedBox(height: 20),
+                
                 Center(
                   child: TextButton(
                     onPressed: () => Navigator.push(
@@ -184,6 +201,26 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
+
+                const SizedBox(height: 10),
+
+                // TOMBOL KELUAR DENGAN KONFIRMASI (UPDATED)
+                Center(
+                  child: TextButton.icon(
+                    onPressed: _showExitDialog, // Memanggil fungsi pop-up di atas
+                    icon: const Icon(Icons.exit_to_app, color: Colors.grey, size: 18),
+                    label: const Text(
+                      "Keluar Aplikasi",
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 40),
               ],
             ),
           ),

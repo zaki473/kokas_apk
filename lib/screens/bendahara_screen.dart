@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import '../services/auth_service.dart';
 import 'login_screen.dart';
 
-// Import semua halaman menu bendahara
+// Import menu Anda
 import 'bendahara/rekap_page.dart';
 import 'bendahara/kas_setting_page.dart';
 import 'bendahara/pengumuman_page.dart';
@@ -19,89 +19,90 @@ class BendaharaScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
-      appBar: AppBar(
-        title: const Text("Dashboard Bendahara", style: TextStyle(color: Colors.white)),
-        backgroundColor: Colors.amber[800],
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(
-            onPressed: () => _showLogoutDialog(context),
-            icon: const Icon(Icons.logout),
-          )
-        ],
-      ),
-      body: Column(
+      backgroundColor: const Color(0xFFF3F4F9), // Warna dasar abu kebiruan (Modern)
+      body: Stack(
         children: [
-          // 1. KARTU TOTAL SALDO (REAL-TIME)
-          _buildTotalKasCard(),
-
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text("Menu Kelola", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          // 1. BACKGROUND DECORATION (Lingkaran gradasi agar tidak flat)
+          Positioned(
+            top: -50,
+            right: -50,
+            child: CircleAvatar(
+              radius: 130,
+              backgroundColor: Colors.amber[700]!.withOpacity(0.4),
             ),
           ),
+          
+          SafeArea(
+            child: CustomScrollView(
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                // 2. CUSTOM TOP BAR (Greeting & Profile)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(25.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text("Halo, Bendahara", 
+                              style: TextStyle(color: Colors.black54, fontSize: 16)),
+                            Text("Kelola Kas KOKAS", 
+                              style: TextStyle(color: Colors.black87, fontSize: 24, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        GestureDetector(
+                          onTap: () => _showLogoutDialog(context),
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(15),
+                              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
+                            ),
+                            child: const Icon(Icons.logout_rounded, color: Colors.redAccent),
+                          ),
+                        )
+                      ],
+                    ),
+                  ),
+                ),
 
-          // 2. GRID MENU (7 MENU)
-          Expanded(
-            child: GridView.count(
-              crossAxisCount: 2, // 2 kolom
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              mainAxisSpacing: 15,
-              crossAxisSpacing: 15,
-              children: [
-                _buildMenuContainer(
-                  context,
-                  title: "Input Transaksi",
-                  icon: Icons.add_chart,
-                  color: Colors.red,
-                  page: const TambahTransaksiPage(),
+                // 3. KARTU SALDO UTAMA (TIDAK FLAT)
+                SliverToBoxAdapter(child: _buildBalanceCard()),
+
+                // 4. JUDUL MENU
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 25, vertical: 10),
+                    child: Text("Menu Utama", 
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                  ),
                 ),
-                _buildMenuContainer(
-                  context,
-                  title: "Verifikasi Bayar", // INI MENU YANG TADI KURANG
-                  icon: Icons.fact_check,
-                  color: Colors.teal,
-                  page: const VerifikasiBayarPage(),
+
+                // 5. GRID MENU MODERN
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 25),
+                  sliver: SliverGrid(
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 20,
+                      crossAxisSpacing: 20,
+                      childAspectRatio: 1.0,
+                    ),
+                    delegate: SliverChildListDelegate([
+                      _buildMenuItem(context, "Input Transaksi", Icons.add_box_rounded, Colors.orange, const TambahTransaksiPage()),
+                      _buildMenuItem(context, "Verifikasi", Icons.verified_user_rounded, Colors.teal, const VerifikasiBayarPage()),
+                      _buildMenuItem(context, "Rekap Kas", Icons.insert_chart_rounded, Colors.blueAccent, const RekapPage()),
+                      _buildMenuItem(context, "Atur Kas", Icons.settings_suggest_rounded, Colors.deepPurple, const KasSettingPage()),
+                      _buildMenuItem(context, "Broadcast", Icons.campaign_rounded, Colors.pinkAccent, const PengumumanPage()),
+                      _buildMenuItem(context, "Reimburse", Icons.wallet_rounded, Colors.green, const ReimbursePage()),
+                      _buildMenuItem(context, "Anggota", Icons.groups_3_rounded, Colors.blueGrey, const StatusAnggotaPage()),
+                    ]),
+                  ),
                 ),
-                _buildMenuContainer(
-                  context,
-                  title: "Rekap Transaksi",
-                  icon: Icons.list_alt,
-                  color: Colors.blue,
-                  page: const RekapPage(),
-                ),
-                _buildMenuContainer(
-                  context,
-                  title: "Tanggal Kas",
-                  icon: Icons.calendar_month,
-                  color: Colors.orange,
-                  page: const KasSettingPage(),
-                ),
-                _buildMenuContainer(
-                  context,
-                  title: "Pengumuman",
-                  icon: Icons.announcement,
-                  color: Colors.purple,
-                  page: const PengumumanPage(),
-                ),
-                _buildMenuContainer(
-                  context,
-                  title: "Reimburse",
-                  icon: Icons.payments,
-                  color: Colors.green,
-                  page: const ReimbursePage(),
-                ),
-                _buildMenuContainer(
-                  context,
-                  title: "Status Anggota",
-                  icon: Icons.group_off,
-                  color: const Color.fromARGB(255, 10, 10, 10),
-                  page: const StatusAnggotaPage(),
-                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 50)),
               ],
             ),
           ),
@@ -110,38 +111,71 @@ class BendaharaScreen extends StatelessWidget {
     );
   }
 
-  // WIDGET HEADER SALDO
-  Widget _buildTotalKasCard() {
+  // WIDGET KARTU SALDO (PREMIUM LOOK)
+  Widget _buildBalanceCard() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('transactions').snapshots(),
       builder: (context, snapshot) {
-        int total = 0;
+        double total = 0;
         if (snapshot.hasData) {
           for (var doc in snapshot.data!.docs) {
-            int jumlah = doc['jumlah'];
+            double jumlah = (doc['jumlah'] ?? 0).toDouble();
             doc['type'] == 'masuk' ? total += jumlah : total -= jumlah;
           }
         }
-        final currencyFormat = NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
+        final formatCurrency = NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
 
         return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 25, vertical: 15),
+          height: 180,
           width: double.infinity,
-          padding: const EdgeInsets.all(30),
           decoration: BoxDecoration(
-            color: Colors.amber[800],
-            borderRadius: const BorderRadius.only(
-              bottomLeft: Radius.circular(30),
-              bottomRight: Radius.circular(30),
+            borderRadius: BorderRadius.circular(30),
+            gradient: const LinearGradient(
+              colors: [Color(0xFF212121), Color(0xFF424242)], // Dark Slate
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.amber[800]!.withOpacity(0.3),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              )
+            ],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Stack(
             children: [
-              const Text("Total Saldo Kas Organisasi", style: TextStyle(color: Colors.white70, fontSize: 14)),
-              const SizedBox(height: 10),
-              Text(
-                currencyFormat.format(total),
-                style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
+              // Variasi background kartu agar tidak flat
+              Positioned(
+                bottom: -20,
+                right: -20,
+                child: Icon(Icons.account_balance_wallet, size: 150, color: Colors.white.withOpacity(0.05)),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(25.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text("Total Saldo KOKAS", style: TextStyle(color: Colors.white70, fontSize: 16)),
+                    const SizedBox(height: 10),
+                    FittedBox(
+                      child: Text(
+                        formatCurrency.format(total),
+                        style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                    Row(
+                      children: [
+                        const Icon(Icons.arrow_upward, color: Colors.greenAccent, size: 16),
+                        const SizedBox(width: 5),
+                        Text("Real-time Database", style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12)),
+                      ],
+                    )
+                  ],
+                ),
               ),
             ],
           ),
@@ -150,54 +184,62 @@ class BendaharaScreen extends StatelessWidget {
     );
   }
 
-  // WIDGET KOTAK MENU
-  Widget _buildMenuContainer(BuildContext context, {required String title, required IconData icon, required Color color, required Widget page}) {
+  // WIDGET ITEM MENU (TIDAK FLAT - EFEK FLOAT)
+  Widget _buildMenuItem(BuildContext context, String title, IconData icon, Color color, Widget page) {
     return InkWell(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => page)),
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(25),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 15,
+              offset: const Offset(0, 8),
+            )
           ],
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircleAvatar(
-              backgroundColor: color.withOpacity(0.1),
-              radius: 30,
-              child: Icon(icon, color: color, size: 30),
+            Container(
+              padding: const EdgeInsets.all(15),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 35),
             ),
-            const SizedBox(height: 12),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), textAlign: TextAlign.center),
+            const SizedBox(height: 15),
+            Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
       ),
     );
   }
 
-  // DIALOG LOGOUT
   void _showLogoutDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text("Logout"),
-        content: const Text("Keluar dari aplikasi?"),
+        content: const Text("Apakah Anda yakin ingin keluar?"),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Batal")),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber[800], shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
             onPressed: () async {
               await AuthService().signOut();
               if (!context.mounted) return;
-              Navigator.pushAndRemoveUntil(
-                context, 
-                MaterialPageRoute(builder: (_) => const LoginScreen()), 
-                (route) => false
-              );
+              Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false);
             }, 
-            child: const Text("Logout")
+            child: const Text("Logout", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
