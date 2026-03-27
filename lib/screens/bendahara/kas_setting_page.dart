@@ -81,39 +81,72 @@ class _KasSettingPageState extends State<KasSettingPage> {
   }
 
   void _saveSettings() async {
-    if (_formKey.currentState!.validate()) {
-      if (selectedDateTime == null) {
+  if (_formKey.currentState!.validate()) {
+    if (selectedDateTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Pilih Batas Waktu Terlebih Dahulu!"), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    // Tampilkan loading agar user tidak tekan tombol berkali-kali
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final bulanInput = _bulanController.text.trim();
+
+      // --- VALIDASI: CEK APAKAH BULAN SUDAH ADA ---
+      final checkExist = await FirebaseFirestore.instance
+          .collection('kas_deadline')
+          .where('bulan', isEqualTo: bulanInput)
+          .get();
+
+      if (checkExist.docs.isNotEmpty) {
+        if (!mounted) return;
+        Navigator.pop(context); // Tutup loading
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Pilih Batas Waktu Terlebih Dahulu!"), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text("Tagihan untuk '$bulanInput' sudah ada! Gunakan nama lain atau hapus yang lama."), 
+            backgroundColor: Colors.orange,
+          ),
         );
         return;
       }
 
-      try {
-        await FirebaseFirestore.instance.collection('kas_deadline').add({
-          'bulan': _bulanController.text,
-          'nominal': int.parse(_nominalController.text.replaceAll('.', '')),
-          'tanggal_deadline': Timestamp.fromDate(selectedDateTime!),
-          'created_at': FieldValue.serverTimestamp(),
-        });
+      // --- SIMPAN JIKA BELUM ADA ---
+      await FirebaseFirestore.instance.collection('kas_deadline').add({
+        'bulan': bulanInput,
+        'nominal': int.parse(_nominalController.text.replaceAll('.', '')),
+        'tanggal_deadline': Timestamp.fromDate(selectedDateTime!),
+        'created_at': FieldValue.serverTimestamp(),
+      });
 
-        if (!mounted) return;
-        setState(() {
-          selectedDateTime = null;
-          _bulanController.clear();
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Tagihan Berhasil Dikirim ke Anggota!"), 
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Gagal: $e")));
-      }
+      if (!mounted) return;
+      Navigator.pop(context); // Tutup loading
+      
+      setState(() {
+        selectedDateTime = null;
+        _bulanController.clear();
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Tagihan Berhasil Dikirim ke Anggota!"), 
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // Tutup loading
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Gagal: $e")));
     }
   }
+}
 
   @override
   Widget build(BuildContext context) {
