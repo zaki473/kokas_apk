@@ -22,7 +22,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   void initState() {
     super.initState();
-    // Animasi pudar saat masuk ke halaman register
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) setState(() => _isContentVisible = true);
     });
@@ -45,16 +44,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Registrasi Berhasil! Silakan Login."),
-            backgroundColor: Colors.green,
+            backgroundColor: Colors.indigo,
             behavior: SnackBarBehavior.floating,
           ),
         );
-        Navigator.pop(context); // Kembali ke Login
+        Navigator.pop(context); 
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(error), 
-            backgroundColor: Colors.red,
+            backgroundColor: Colors.redAccent,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -65,119 +64,146 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFF1A237E), // BACKGROUND FULL NAVY
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        foregroundColor: Colors.black,
-        title: const Text("Buat Akun", style: TextStyle(fontWeight: FontWeight.bold)),
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text("Buat Akun Baru", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
       body: AnimatedOpacity(
-        duration: const Duration(milliseconds: 500),
+        duration: const Duration(milliseconds: 600),
         opacity: _isContentVisible ? 1.0 : 0.0,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 25),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 20),
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(15),
+        child: Container(
+          height: double.infinity,
+          width: double.infinity,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF1A237E), Color(0xFF0D1242)], // Gradasi Navy
+            ),
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 30),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const SizedBox(height: 20),
+                  // Icon Person Putih
+                  Container(
+                    padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: Colors.amber[50],
+                      color: Colors.white.withOpacity(0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.person_add_outlined, size: 60, color: Colors.amber[800]),
+                    child: const Icon(Icons.person_add_rounded, size: 70, color: Colors.white),
                   ),
-                ),
-                const SizedBox(height: 30),
-                const Text(
-                  "Daftar Anggota",
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                const Text(
-                  "Lengkapi data di bawah untuk bergabung.",
-                  style: TextStyle(color: Colors.grey),
-                ),
-                const SizedBox(height: 30),
-                
-                // Input Nama
-                _buildTextField(
-                  controller: _namaController,
-                  label: "Nama Lengkap",
-                  icon: Icons.person_outline,
-                  validator: AppValidators.validateName,
-                ),
-                const SizedBox(height: 15),
+                  const SizedBox(height: 30),
+                  const Text(
+                    "Daftar Anggota",
+                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  const Text(
+                    "Gabung KOKAS untuk kelola kas bersama",
+                    style: TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+                  const SizedBox(height: 40),
+                  
+                  // Input Nama
+                  _buildTextField(
+                    controller: _namaController,
+                    label: "Nama Lengkap",
+                    icon: Icons.person_outline_rounded,
+                    validator: AppValidators.validateName,
+                  ),
+                  const SizedBox(height: 15),
 
-                // Input Email
-                _buildTextField(
-                  controller: _emailController,
-                  label: "Email",
-                  icon: Icons.email_outlined,
-                  validator: AppValidators.validateEmail,
-                ),
-                const SizedBox(height: 15),
+                  // Input Email
+                  _buildTextField(
+                    controller: _emailController,
+                    label: "Alamat Email",
+                    icon: Icons.email_outlined,
+                    validator: AppValidators.validateEmail,
+                  ),
+                  const SizedBox(height: 15),
 
-                // Input Password
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: "Password",
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                  // Input Password
+                  TextFormField(
+                    controller: _passwordController,
+                    obscureText: _obscurePassword,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: "Password",
+                      labelStyle: const TextStyle(color: Colors.white70),
+                      prefixIcon: const Icon(Icons.lock_outline_rounded, color: Colors.white70),
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: Colors.white70),
+                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white.withOpacity(0.1),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                        borderSide: const BorderSide(color: Colors.white),
+                      ),
+                      errorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                        borderSide: const BorderSide(color: Colors.redAccent),
+                      ),
                     ),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.grey),
+                    validator: AppValidators.validatePassword,
+                  ),
+                  
+                  const SizedBox(height: 45),
+
+                  // Tombol Daftar (Putih Kontras)
+                  SizedBox(
+                    width: double.infinity,
+                    height: 55,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: const Color(0xFF1A237E),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        elevation: 0,
+                      ),
+                      onPressed: _isLoading ? null : _handleRegister,
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 20, width: 20,
+                              child: CircularProgressIndicator(color: Color(0xFF1A237E), strokeWidth: 3),
+                            )
+                          : const Text("DAFTAR SEKARANG", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.1)),
                     ),
                   ),
-                  validator: AppValidators.validatePassword,
-                ),
-                
-                const SizedBox(height: 40),
-
-                // Tombol Daftar
-                SizedBox(
-                  width: double.infinity,
-                  height: 55,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.amber[800],
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      elevation: 0,
-                    ),
-                    onPressed: _isLoading ? null : _handleRegister,
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                          )
-                        : const Text("DAFTAR SEKARANG", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                
-                // Tombol Kembali
-                Center(
-                  child: TextButton(
+                  const SizedBox(height: 25),
+                  
+                  // Tombol Kembali
+                  TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: Text(
-                      "Sudah punya akun? Login di sini",
-                      style: TextStyle(color: Colors.amber[900]),
+                    child: RichText(
+                      text: const TextSpan(
+                        text: "Sudah punya akun? ",
+                        style: TextStyle(color: Colors.white70),
+                        children: [
+                          TextSpan(
+                            text: "Login di sini",
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 30),
+                ],
+              ),
             ),
           ),
         ),
@@ -185,7 +211,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  // Helper widget untuk build TextField agar code lebih rapi
+  // Widget Helper Textfield Navy Style
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
@@ -194,13 +220,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }) {
     return TextFormField(
       controller: controller,
+      style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        labelStyle: const TextStyle(color: Colors.white70),
+        prefixIcon: Icon(icon, color: Colors.white70),
+        filled: true,
+        fillColor: Colors.white.withOpacity(0.1),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.grey),
+          borderRadius: BorderRadius.circular(15),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: Colors.white),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: Colors.redAccent),
         ),
       ),
       validator: validator,

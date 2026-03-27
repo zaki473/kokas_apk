@@ -20,7 +20,11 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        primarySwatch: Colors.amber,
+        // Mengatur tema utama aplikasi ke Navy
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF1A237E),
+          primary: const Color(0xFF1A237E),
+        ),
       ),
       home: const SplashScreenWrapper(),
     );
@@ -41,48 +45,25 @@ class _SplashScreenWrapperState extends State<SplashScreenWrapper> with SingleTi
   @override
   void initState() {
     super.initState();
-    
-    // Inisialisasi Animasi Fade In
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     );
-
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeIn),
     );
-
     _controller.forward();
     _navigateToLogin();
   }
 
   Future<void> _navigateToLogin() async {
-  await Future.delayed(const Duration(seconds: 3));
-  if (!mounted) return;
-
-  Navigator.pushReplacement(
-    context,
-    PageRouteBuilder(
-      pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
-      transitionsBuilder: (context, animation, secondaryAnimation, child) {
-        // Animasi Fade
-        var fade = CurvedAnimation(parent: animation, curve: Curves.easeIn);
-        
-        // Animasi Slide (naik sedikit dari bawah ke atas)
-        var offset = Tween<Offset>(
-          begin: const Offset(0, 0.05), // Mulai dari 5% di bawah
-          end: Offset.zero,
-        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
-
-        return FadeTransition(
-          opacity: fade,
-          child: SlideTransition(position: offset, child: child),
-        );
-      },
-      transitionDuration: const Duration(milliseconds: 1500), // 1 detik agar sangat smooth
-    ),
-  );
-}
+    await Future.delayed(const Duration(seconds: 3));
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const LoginScreen()),
+    );
+  }
 
   @override
   void dispose() {
@@ -93,82 +74,48 @@ class _SplashScreenWrapperState extends State<SplashScreenWrapper> with SingleTi
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        // Menggunakan Gradient agar terlihat lebih modern
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.amber[800]!,
-              Colors.orange[700]!,
-            ],
-          ),
-        ),
-        child: FadeTransition(
-          opacity: _fadeAnimation,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Logo dengan bayangan halus
-              Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.account_balance_wallet,
-                  size: 100,
-                  color: Colors.white,
-                ),
+      // Background full Navy
+      backgroundColor: const Color(0xFF1A237E), 
+      body: FadeTransition(
+        opacity: _fadeAnimation,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Icon Dompet Putih
+            const Icon(
+              Icons.account_balance_wallet_rounded,
+              size: 100,
+              color: Colors.white,
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              "KOKAS",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 36,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 8,
               ),
-              const SizedBox(height: 24),
-              // Nama Aplikasi
-              const Text(
-                "KOKAS",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 4,
-                  shadows: [
-                    Shadow(
-                      blurRadius: 10.0,
-                      color: Colors.black26,
-                      offset: Offset(2, 2),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                "Kelola Kas Jadi Mudah",
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              const SizedBox(height: 60),
-              // Loading indicator yang lebih minimalis
-              const SizedBox(
-                width: 40,
-                height: 40,
-                child: CircularProgressIndicator(
-                  strokeWidth: 3,
+            ),
+            const Text(
+              "Management Kas Masa Kini",
+              style: TextStyle(color: Colors.white60, fontSize: 14),
+            ),
+            const SizedBox(height: 100),
+            
+            // Loading Horizontal Putih agar terlihat di background Navy
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 60),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: const LinearProgressIndicator(
+                  minHeight: 4,
+                  backgroundColor: Colors.white12,
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

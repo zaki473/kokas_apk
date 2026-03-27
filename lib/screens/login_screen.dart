@@ -25,7 +25,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(milliseconds: 400), () {
+    Future.delayed(const Duration(milliseconds: 200), () {
       if (mounted) {
         setState(() {
           _isContentVisible = true;
@@ -34,24 +34,26 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
-  // FUNGSI BARU: Menampilkan Pop-up Konfirmasi Keluar
+  // FUNGSI: Pop-up Konfirmasi Keluar (Tema Navy)
   void _showExitDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        title: const Text("Keluar Aplikasi?"),
-        content: const Text("Apakah Anda yakin ingin keluar dari aplikasi KOKAS?"),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("Keluar Aplikasi?", style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text("Apakah Anda yakin ingin menutup aplikasi KOKAS?"),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context), // Menutup pop-up saja
+            onPressed: () => Navigator.pop(context),
             child: const Text("BATAL", style: TextStyle(color: Colors.grey)),
           ),
-          TextButton(
-            onPressed: () {
-              SystemNavigator.pop(); // Menutup aplikasi total
-            },
-            child: Text("KELUAR", style: TextStyle(color: Colors.amber[800], fontWeight: FontWeight.bold)),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1A237E),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => SystemNavigator.pop(),
+            child: const Text("KELUAR", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -82,7 +84,7 @@ class _LoginScreenState extends State<LoginScreen> {
               transitionsBuilder: (context, anim, secondaryAnim, child) {
                 return FadeTransition(opacity: anim, child: child);
               },
-              transitionDuration: const Duration(milliseconds: 600),
+              transitionDuration: const Duration(milliseconds: 800),
             ),
             (route) => false,
           );
@@ -92,7 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Login Gagal: Email atau Password salah"),
-            backgroundColor: Colors.red,
+            backgroundColor: Colors.redAccent,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -105,125 +107,173 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.black,
-        automaticallyImplyLeading: false,
-      ),
+      backgroundColor: const Color(0xFF1A237E), // BACKGROUND FULL NAVY
       body: AnimatedOpacity(
-        duration: const Duration(milliseconds: 600),
+        duration: const Duration(milliseconds: 800),
         opacity: _isContentVisible ? 1.0 : 0.0,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 25),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 40),
-                const Text(
-                  "Selamat Datang di KOKAS!",
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                ),
-                const Text(
-                  "Silakan masuk untuk mengelola kas.",
-                  style: TextStyle(color: Colors.grey),
-                ),
-                const SizedBox(height: 40),
-                
-                TextFormField(
-                  controller: _emailController,
-                  decoration: InputDecoration(
-                    labelText: "Email",
-                    prefixIcon: const Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  validator: AppValidators.validateEmail,
-                ),
-                const SizedBox(height: 20),
-                
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: "Password",
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                    ),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  validator: AppValidators.validatePassword,
-                ),
-                const SizedBox(height: 30),
-
-                SizedBox(
-                  width: double.infinity,
-                  height: 55,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.amber[800],
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      elevation: 2,
-                    ),
-                    onPressed: _isLoading ? null : _handleLogin,
-                    child: _isLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text(
-                            "MASUK",
-                            style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
-                          ),
-                  ),
-                ),
-                
-                const SizedBox(height: 20),
-                
-                Center(
-                  child: TextButton(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const RegisterScreen()),
-                    ),
-                    child: RichText(
-                      text: TextSpan(
-                        text: "Belum punya akun? ",
-                        style: const TextStyle(color: Colors.black54),
-                        children: [
-                          TextSpan(
-                            text: "Daftar Sekarang",
-                            style: TextStyle(color: Colors.amber[900], fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                // TOMBOL KELUAR DENGAN KONFIRMASI (UPDATED)
-                Center(
-                  child: TextButton.icon(
-                    onPressed: _showExitDialog, // Memanggil fungsi pop-up di atas
-                    icon: const Icon(Icons.exit_to_app, color: Colors.grey, size: 18),
-                    label: const Text(
-                      "Keluar Aplikasi",
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ),
-                
-                const SizedBox(height: 40),
-              ],
+        child: Container(
+          height: double.infinity,
+          width: double.infinity,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF1A237E), Color(0xFF0D1242)], // Gradasi Navy Gelap
             ),
           ),
+          child: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 30),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 60),
+                    // Logo/Icon Putih
+                    const Icon(Icons.account_balance_wallet_rounded, size: 80, color: Colors.white),
+                    const SizedBox(height: 20),
+                    const Text(
+                      "KOKAS LOGIN",
+                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 2),
+                    ),
+                    const Text(
+                      "Kelola kas organisasi dengan aman",
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                    const SizedBox(height: 50),
+                    
+                    // INPUT EMAIL (MODERN WHITE STYLE)
+                    _buildTextField(
+                      controller: _emailController,
+                      label: "Alamat Email",
+                      icon: Icons.email_outlined,
+                      validator: AppValidators.validateEmail,
+                    ),
+                    const SizedBox(height: 20),
+                    
+                    // INPUT PASSWORD
+                    _buildTextField(
+                      controller: _passwordController,
+                      label: "Password",
+                      icon: Icons.lock_outline,
+                      isPassword: true,
+                      obscureText: _obscurePassword,
+                      toggleObscure: () => setState(() => _obscurePassword = !_obscurePassword),
+                      validator: AppValidators.validatePassword,
+                    ),
+                    const SizedBox(height: 40),
+
+                    // TOMBOL MASUK (KONTRASTERANG - PUTIH)
+                    SizedBox(
+                      width: double.infinity,
+                      height: 55,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF1A237E),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                          elevation: 0,
+                        ),
+                        onPressed: _isLoading ? null : _handleLogin,
+                        child: _isLoading
+                            ? const SizedBox(
+                                height: 20, width: 20,
+                                child: CircularProgressIndicator(color: Color(0xFF1A237E), strokeWidth: 3),
+                              )
+                            : const Text(
+                                "MASUK SEKARANG",
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1),
+                              ),
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 25),
+                    
+                    // DAFTAR AKUN
+                    TextButton(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                      ),
+                      child: RichText(
+                        text: const TextSpan(
+                          text: "Belum punya akun? ",
+                          style: TextStyle(color: Colors.white70),
+                          children: [
+                            TextSpan(
+                              text: "Daftar Disini",
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 40),
+
+                    // TOMBOL KELUAR
+                    TextButton.icon(
+                      onPressed: _showExitDialog,
+                      icon: const Icon(Icons.power_settings_new_rounded, color: Colors.white54, size: 20),
+                      label: const Text(
+                        "Keluar Aplikasi",
+                        style: TextStyle(color: Colors.white54, fontSize: 14),
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // WIDGET HELPER UNTUK TEXTFIELD NAVY STYLE
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    bool isPassword = false,
+    bool obscureText = false,
+    VoidCallback? toggleObscure,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      obscureText: obscureText,
+      validator: validator,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.white70),
+        prefixIcon: Icon(icon, color: Colors.white70),
+        suffixIcon: isPassword 
+            ? IconButton(
+                icon: Icon(obscureText ? Icons.visibility_off : Icons.visibility, color: Colors.white70),
+                onPressed: toggleObscure,
+              ) 
+            : null,
+        filled: true,
+        fillColor: Colors.white.withOpacity(0.1),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: Colors.white),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: Colors.redAccent),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: Colors.redAccent),
         ),
       ),
     );

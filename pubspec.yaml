@@ -109,5 +109,5 @@ flutter_launcher_icons:
     min_sdk_android: 21 # android min sdk min:21 or higher
     
     # Khusus Android agar icon tidak terpotong (Adaptive Icon)
-    adaptive_icon_background: "#F38D1D" # Warna orange sesuai logo Anda
+    adaptive_icon_background: "#1A237E" #navy
     adaptive_icon_foreground: "assets/icon/app_icon_kokas.png" # Pastikan file ini ada di folder yang benar
