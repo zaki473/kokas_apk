@@ -1,28 +1,96 @@
-import 'dart:convert'; // Penting untuk base64Decode
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 
 class ReimbursePage extends StatelessWidget {
   const ReimbursePage({super.key});
 
-  // Fungsi untuk menampilkan foto ukuran penuh
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF4F6F8),
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: const Color(0xFF1A237E),
+        title: const Text("Ceklis Reimburse", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Stack(
+        children: [
+          Container(
+            height: 100,
+            decoration: const BoxDecoration(
+              color: Color(0xFF1A237E),
+              borderRadius: BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
+            ),
+          ),
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('reimbursements')
+                .orderBy('tanggal_kirim', descending: true)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              var docs = snapshot.data?.docs ?? [];
+              if (docs.isEmpty) return const Center(child: Text("Belum ada pengajuan."));
+
+              return ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                itemCount: docs.length,
+                itemBuilder: (context, index) {
+                  var data = docs[index].data() as Map<String, dynamic>;
+                  return ReimburseCardItem(
+                    id: docs[index].id,
+                    data: data,
+                  );
+                },
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// --- KITA BUAT WIDGET TERPISAH AGAR BISA MEMILIKI STATE LOADING SENDIRI ---
+class ReimburseCardItem extends StatefulWidget {
+  final String id;
+  final Map<String, dynamic> data;
+
+  const ReimburseCardItem({super.key, required this.id, required this.data});
+
+  @override
+  State<ReimburseCardItem> createState() => _ReimburseCardItemState();
+}
+
+class _ReimburseCardItemState extends State<ReimburseCardItem> {
+  bool _isUpdating = false; // State untuk loading lokal
+
+  String _formatCurrency(double value) {
+    return NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0).format(value);
+  }
+
   void _showImagePreview(BuildContext context, String base64String) {
     showDialog(
       context: context,
       builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppBar(
-              title: const Text("Bukti Nota", style: TextStyle(fontSize: 16)),
-              automaticallyImplyLeading: false,
-              actions: [IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close))],
+            Align(
+              alignment: Alignment.bottomRight,
+              child: IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context)),
             ),
-            InteractiveViewer( // Supaya gambar bisa di-zoom
-              child: Image.memory(
-                base64Decode(base64String),
-                fit: BoxFit.contain,
-              ),
+            Container(
+              decoration: BoxDecoration(borderRadius: BorderRadius.circular(20), color: Colors.white),
+              clipBehavior: Clip.antiAlias,
+              child: InteractiveViewer(child: Image.memory(base64Decode(base64String), fit: BoxFit.contain)),
             ),
           ],
         ),
@@ -32,79 +100,79 @@ class ReimbursePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Ceklis Reimburse"),
-        backgroundColor: Colors.blue[800],
-        foregroundColor: Colors.white,
+    bool isPaid = widget.data['status'] == 'dibayar';
+    String? photo = widget.data['url_bukti'];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 15),
+      decoration: BoxDecoration(
+        color: isPaid ? Colors.green[50]?.withOpacity(0.5) : Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('reimbursements')
-            .orderBy('tanggal_kirim', descending: true) // Urutkan dari yang terbaru
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-          
-          var docs = snapshot.data!.docs;
-          if (docs.isEmpty) return const Center(child: Text("Belum ada pengajuan."));
-
-          return ListView.separated(
-            itemCount: docs.length,
-            separatorBuilder: (context, index) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              var data = docs[index].data() as Map<String, dynamic>;
-              String docId = docs[index].id;
-              bool isPaid = data['status'] == 'dibayar';
-              String? base64Photo = data['url_bukti'];
-
-              return Container(
-                color: isPaid ? Colors.green[50] : Colors.white,
-                child: ListTile(
-                  leading: GestureDetector(
-                    onTap: () {
-                      if (base64Photo != null) _showImagePreview(context, base64Photo);
-                    },
-                    child: Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[200],
-                        borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Row(
+          children: [
+            // Foto Nota
+            GestureDetector(
+              onTap: () { if (photo != null) _showImagePreview(context, photo); },
+              child: Container(
+                width: 65, height: 65,
+                decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(15)),
+                clipBehavior: Clip.antiAlias,
+                child: photo != null
+                    ? Image.memory(base64Decode(photo), fit: BoxFit.cover, cacheWidth: 150)
+                    : const Icon(Icons.image_not_supported, color: Colors.grey),
+              ),
+            ),
+            const SizedBox(width: 15),
+            // Detail
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.data['nama_pengaju'] ?? "Anggota", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  Text(_formatCurrency((widget.data['jumlah'] ?? 0).toDouble()), style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF1A237E))),
+                  Text(widget.data['keperluan'] ?? "-", style: TextStyle(fontSize: 12, color: Colors.grey[600]), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+            // Checkbox dengan Loading
+            Column(
+              children: [
+                SizedBox(
+                  height: 40,
+                  width: 40,
+                  child: _isUpdating 
+                    ? const Padding(
+                        padding: EdgeInsets.all(10.0),
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.green),
+                      )
+                    : Checkbox(
+                        value: isPaid,
+                        activeColor: Colors.green,
+                        onChanged: (val) async {
+                          setState(() => _isUpdating = true); // Mulai Loading
+                          try {
+                            await FirebaseFirestore.instance
+                                .collection('reimbursements')
+                                .doc(widget.id)
+                                .update({'status': val! ? 'dibayar' : 'pending'});
+                          } finally {
+                            if (mounted) setState(() => _isUpdating = false); // Stop Loading
+                          }
+                        },
                       ),
-                      child: base64Photo != null
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.memory(base64Decode(base64Photo), fit: BoxFit.cover),
-                            )
-                          : const Icon(Icons.image_not_supported),
-                    ),
-                  ),
-                  title: Text(
-                    data['nama_pengaju'] ?? "Tanpa Nama",
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("Rp ${data['jumlah']} - ${data['keperluan']}"),
-                      const Text("Klik foto untuk memperbesar", style: TextStyle(fontSize: 10, color: Colors.blue)),
-                    ],
-                  ),
-                  trailing: Checkbox(
-                    value: isPaid,
-                    onChanged: (val) {
-                      FirebaseFirestore.instance
-                          .collection('reimbursements')
-                          .doc(docId)
-                          .update({'status': val! ? 'dibayar' : 'pending'});
-                    },
-                  ),
                 ),
-              );
-            },
-          );
-        },
+                Text(
+                  isPaid ? "LUNAS" : "BAYAR",
+                  style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: isPaid ? Colors.green : Colors.grey),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
