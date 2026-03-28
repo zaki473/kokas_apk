@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class KasSettingPage extends StatefulWidget {
   const KasSettingPage({super.key});
@@ -12,36 +14,50 @@ class KasSettingPage extends StatefulWidget {
 
 class _KasSettingPageState extends State<KasSettingPage> {
   final _formKey = GlobalKey<FormState>();
+  final String myUid = FirebaseAuth.instance.currentUser?.uid ?? "";
+
+  String? myGroupId;
+  bool isLoading = true;
+  bool isSaving = false;
+
   final TextEditingController _bulanController = TextEditingController();
-  final TextEditingController _nominalController = TextEditingController(text: "10000");
-  
+  final TextEditingController _nominalController = TextEditingController(text: "10,000");
+
   DateTime? selectedDateTime;
-  Timer? _timer;
-  DateTime _now = DateTime.now();
+
+  // Warna Tema Navy
+  final Color primaryNavy = const Color(0xFF1A237E);
+  final Color backgroundColor = const Color(0xFFF4F6F8);
 
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) setState(() => _now = DateTime.now());
-    });
+    _loadGroupId();
+  }
+
+  Future<void> _loadGroupId() async {
+    try {
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(myUid).get();
+      if (userDoc.exists) {
+        setState(() {
+          myGroupId = userDoc['groupId'];
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() => isLoading = false);
+    }
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
     _bulanController.dispose();
     _nominalController.dispose();
     super.dispose();
   }
 
-  // Fungsi Format Rupiah
-  String formatCurrency(double value) {
-    return NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0).format(value);
-  }
-
   Future<void> _selectDateTime(BuildContext context) async {
-    final DateTime? pickedDate = await showDatePicker(
+    final pickedDate = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
       firstDate: DateTime.now(),
@@ -49,7 +65,7 @@ class _KasSettingPageState extends State<KasSettingPage> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(primary: Color(0xFF1A237E)),
+            colorScheme: ColorScheme.light(primary: primaryNavy),
           ),
           child: child!,
         );
@@ -58,141 +74,112 @@ class _KasSettingPageState extends State<KasSettingPage> {
 
     if (pickedDate != null) {
       if (!context.mounted) return;
-      final TimeOfDay? pickedTime = await showTimePicker(
+      final pickedTime = await showTimePicker(
         context: context,
         initialTime: TimeOfDay.now(),
       );
 
       if (pickedTime != null) {
-        DateTime finalDateTime = DateTime(
+        final finalDateTime = DateTime(
           pickedDate.year, pickedDate.month, pickedDate.day,
           pickedTime.hour, pickedTime.minute,
         );
-
-        if (finalDateTime.isBefore(DateTime.now())) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Waktu tidak boleh di masa lalu!"), backgroundColor: Colors.orange),
-          );
-          return;
-        }
         setState(() => selectedDateTime = finalDateTime);
       }
     }
   }
 
-  void _saveSettings() async {
-  if (_formKey.currentState!.validate()) {
+  void _showSnackBar(String msg, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: color, behavior: SnackBarBehavior.floating),
+    );
+  }
+
+  Future<void> _saveSettings() async {
+    if (!_formKey.currentState!.validate()) return;
     if (selectedDateTime == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Pilih Batas Waktu Terlebih Dahulu!"), backgroundColor: Colors.red),
-      );
+      _showSnackBar("Pilih deadline dulu!", Colors.redAccent);
       return;
     }
+    if (myGroupId == null) return;
 
-    // Tampilkan loading agar user tidak tekan tombol berkali-kali
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
-    );
-
+    setState(() => isSaving = true);
     try {
-      final bulanInput = _bulanController.text.trim();
+      final bulan = _bulanController.text.trim();
+      final nominal = int.parse(_nominalController.text.replaceAll(',', ''));
 
-      // --- VALIDASI: CEK APAKAH BULAN SUDAH ADA ---
-      final checkExist = await FirebaseFirestore.instance
+      final check = await FirebaseFirestore.instance
           .collection('kas_deadline')
-          .where('bulan', isEqualTo: bulanInput)
+          .where('bulan', isEqualTo: bulan)
+          .where('groupId', isEqualTo: myGroupId)
           .get();
 
-      if (checkExist.docs.isNotEmpty) {
-        if (!mounted) return;
-        Navigator.pop(context); // Tutup loading
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Tagihan untuk '$bulanInput' sudah ada! Gunakan nama lain atau hapus yang lama."), 
-            backgroundColor: Colors.orange,
-          ),
-        );
+      if (check.docs.isNotEmpty) {
+        _showSnackBar("Sudah ada tagihan bulan ini!", Colors.orange);
+        setState(() => isSaving = false);
         return;
       }
 
-      // --- SIMPAN JIKA BELUM ADA ---
       await FirebaseFirestore.instance.collection('kas_deadline').add({
-        'bulan': bulanInput,
-        'nominal': int.parse(_nominalController.text.replaceAll('.', '')),
+        'bulan': bulan,
+        'nominal': nominal,
         'tanggal_deadline': Timestamp.fromDate(selectedDateTime!),
         'created_at': FieldValue.serverTimestamp(),
+        'groupId': myGroupId,
       });
 
-      if (!mounted) return;
-      Navigator.pop(context); // Tutup loading
-      
       setState(() {
         selectedDateTime = null;
         _bulanController.clear();
+        isSaving = false;
       });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Tagihan Berhasil Dikirim ke Anggota!"), 
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      _showSnackBar("Tagihan kas berhasil dikirim!", primaryNavy);
     } catch (e) {
-      if (!mounted) return;
-      Navigator.pop(context); // Tutup loading
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Gagal: $e")));
+      setState(() => isSaving = false);
+      _showSnackBar("Error: $e", Colors.red);
     }
   }
-}
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return Scaffold(body: Center(child: CircularProgressIndicator(color: primaryNavy)));
+    }
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8),
+      backgroundColor: backgroundColor,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF1A237E),
-        title: const Text("Kirim Tagihan Kas", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        backgroundColor: primaryNavy,
+        title: const Text("Pengaturan Kas", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Stack(
         children: [
+          // Curved Header Background
           Container(
-            height: 100,
-            decoration: const BoxDecoration(
-              color: Color(0xFF1A237E),
-              borderRadius: BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
+            height: 60,
+            decoration: BoxDecoration(
+              color: primaryNavy,
+              borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
             ),
           ),
+
           SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 25),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // --- JAM DIGITAL WIDGET ---
-                _buildLiveClock(),
-
-                const SizedBox(height: 25),
+                const SizedBox(height: 10),
                 
-                // --- FORM INPUT ---
-                _buildInputForm(),
+                // Form Input Tagihan
+                _buildFormCard(),
 
-                const SizedBox(height: 35),
-
-                // --- DAFTAR TAGIHAN AKTIF ---
-                const Row(
-                  children: [
-                    Icon(Icons.history_rounded, color: Color(0xFF1A237E), size: 20),
-                    SizedBox(width: 8),
-                    Text("Riwayat Tagihan", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF2D3142))),
-                  ],
-                ),
+                const SizedBox(height: 30),
+                const Text("Daftar Tagihan Aktif", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
                 const SizedBox(height: 15),
-                _buildTagihanList(),
+                _buildList(),
                 const SizedBox(height: 50),
               ],
             ),
@@ -202,166 +189,143 @@ class _KasSettingPageState extends State<KasSettingPage> {
     );
   }
 
-  Widget _buildLiveClock() {
+  Widget _buildFormCard() {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+        borderRadius: BorderRadius.circular(25),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text("Waktu Server", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-              Text(DateFormat('dd MMMM yyyy').format(_now), style: const TextStyle(fontWeight: FontWeight.bold)),
-            ],
-          ),
-          Text(
-            DateFormat('HH:mm:ss').format(_now),
-            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF1A237E)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInputForm() {
-    return Form(
-      key: _formKey,
-      child: Column(
-        children: [
-          _buildTextField(
-            controller: _bulanController,
-            label: "Untuk Bulan",
-            hint: "Contoh: Januari 2024",
-            icon: Icons.calendar_month_outlined,
-          ),
-          const SizedBox(height: 15),
-          _buildTextField(
-            controller: _nominalController,
-            label: "Nominal Iuran",
-            hint: "10000",
-            icon: Icons.payments_outlined,
-            isNumber: true,
-            prefix: "Rp ",
-          ),
-          const SizedBox(height: 15),
-          
-          // Deadline Selector
-          InkWell(
-            onTap: () => _selectDateTime(context),
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: selectedDateTime != null ? const Color(0xFF1A237E) : Colors.transparent),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.timer_outlined, color: selectedDateTime != null ? const Color(0xFF1A237E) : Colors.grey),
-                  const SizedBox(width: 15),
-                  Text(
-                    selectedDateTime == null 
-                      ? "Pilih Batas Waktu (Deadline)" 
-                      : DateFormat('dd MMM yyyy, HH:mm').format(selectedDateTime!),
-                    style: TextStyle(
-                      color: selectedDateTime == null ? Colors.grey[600] : Colors.black,
-                      fontWeight: selectedDateTime == null ? FontWeight.normal : FontWeight.bold
+      child: Form(
+        key: _formKey,
+        child: Column(
+          children: [
+            _buildStyledTextField(
+              controller: _bulanController,
+              label: "Bulan Iuran",
+              hint: "Misal: April 2024",
+              icon: Icons.calendar_today_rounded,
+            ),
+            const SizedBox(height: 15),
+            _buildStyledTextField(
+              controller: _nominalController,
+              label: "Nominal Kas (Rp)",
+              icon: Icons.account_balance_wallet_rounded,
+              isNumber: true,
+            ),
+            const SizedBox(height: 15),
+            
+            // Deadline Picker
+            GestureDetector(
+              onTap: () => _selectDateTime(context),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 15),
+                decoration: BoxDecoration(
+                  color: backgroundColor,
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.event_available_rounded, color: primaryNavy),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        selectedDateTime == null
+                            ? "Atur Batas Waktu (Deadline)"
+                            : DateFormat('dd MMM yyyy, HH:mm').format(selectedDateTime!),
+                        style: TextStyle(color: selectedDateTime == null ? Colors.grey[600] : Colors.black87, fontSize: 14),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 30),
-          
-          SizedBox(
-            width: double.infinity,
-            height: 60,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1A237E),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                elevation: 5,
-              ),
-              onPressed: _saveSettings,
-              child: const Text("KIRIM TAGIHAN MASSAL", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            ),
-          )
-        ],
-      ),
-    );
-  }
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    required IconData icon,
-    bool isNumber = false,
-    String? prefix,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: TextFormField(
-        controller: controller,
-        keyboardType: isNumber ? TextInputType.number : TextInputType.text,
-        validator: (v) => v!.isEmpty ? "Harus diisi" : null,
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: hint,
-          prefixText: prefix,
-          prefixIcon: Icon(icon, color: const Color(0xFF1A237E)),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
-          filled: true,
-          fillColor: Colors.white,
+            const SizedBox(height: 25),
+
+            // Submit Button
+            SizedBox(
+              width: double.infinity,
+              height: 55,
+              child: isSaving 
+                ? Center(child: CircularProgressIndicator(color: primaryNavy))
+                : ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryNavy,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      elevation: 0,
+                    ),
+                    onPressed: _saveSettings,
+                    child: const Text("KIRIM TAGIHAN", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildTagihanList() {
+  Widget _buildStyledTextField({
+    required TextEditingController controller,
+    required String label,
+    String? hint,
+    required IconData icon,
+    bool isNumber = false,
+  }) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+      inputFormatters: isNumber ? [FilteringTextInputFormatter.digitsOnly, ThousandsFormatter()] : [],
+      validator: (v) => v!.isEmpty ? "Wajib diisi" : null,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        prefixIcon: Icon(icon, color: primaryNavy, size: 22),
+        filled: true,
+        fillColor: backgroundColor,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+        contentPadding: const EdgeInsets.symmetric(vertical: 18),
+      ),
+    );
+  }
+
+  Widget _buildList() {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('kas_deadline').orderBy('tanggal_deadline', descending: true).snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        if (snapshot.data!.docs.isEmpty) return const Center(child: Text("Belum ada tagihan aktif."));
+      stream: FirebaseFirestore.instance
+          .collection('kas_deadline')
+          .where('groupId', isEqualTo: myGroupId)
+          .snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData) return const SizedBox();
+        final docs = snap.data!.docs;
+        if (docs.isEmpty) return const Center(child: Text("Belum ada tagihan aktif."));
 
         return ListView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          itemCount: snapshot.data!.docs.length,
-          itemBuilder: (context, index) {
-            var doc = snapshot.data!.docs[index];
-            DateTime dl = (doc['tanggal_deadline'] as Timestamp).toDate();
-            bool isOver = _now.isAfter(dl);
+          itemCount: docs.length,
+          itemBuilder: (c, i) {
+            final d = docs[i];
+            final dl = (d['tanggal_deadline'] as Timestamp).toDate();
 
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: isOver ? Colors.grey[200]! : Colors.green[100]!),
+                borderRadius: BorderRadius.circular(15),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 5)],
               ),
               child: ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: isOver ? Colors.grey[100] : Colors.green[50],
-                  child: Icon(isOver ? Icons.history_rounded : Icons.notifications_active, color: isOver ? Colors.grey : Colors.green),
+                  backgroundColor: primaryNavy.withOpacity(0.1),
+                  child: Icon(Icons.receipt_long_rounded, color: primaryNavy, size: 20),
                 ),
-                title: Text("Bulan ${doc['bulan']}", style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text("Batas: ${DateFormat('dd MMM, HH:mm').format(dl)}"),
+                title: Text(d['bulan'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                subtitle: Text("Batas: ${DateFormat('dd MMM yyyy').format(dl)}", style: const TextStyle(fontSize: 12)),
                 trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                  onPressed: () => _showDeleteConfirm(doc.reference),
+                  icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+                  onPressed: () => _confirmDelete(d.reference),
                 ),
               ),
             );
@@ -371,18 +335,31 @@ class _KasSettingPageState extends State<KasSettingPage> {
     );
   }
 
-  void _showDeleteConfirm(DocumentReference ref) {
+  void _confirmDelete(DocumentReference ref) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         title: const Text("Hapus Tagihan?"),
-        content: const Text("Anggota tidak akan lagi melihat tagihan ini di dashboard mereka."),
+        content: const Text("Tindakan ini tidak dapat dibatalkan."),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Batal")),
           TextButton(onPressed: () { ref.delete(); Navigator.pop(context); }, child: const Text("Hapus", style: TextStyle(color: Colors.red))),
         ],
       ),
+    );
+  }
+}
+
+class ThousandsFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(oldValue, newValue) {
+    if (newValue.text.isEmpty) return newValue;
+    final value = int.parse(newValue.text.replaceAll(',', ''));
+    final newText = NumberFormat('#,###').format(value);
+    return TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: newText.length),
     );
   }
 }

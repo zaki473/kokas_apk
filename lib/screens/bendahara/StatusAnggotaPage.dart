@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 // import 'package:intl/intl.dart';
 
 class StatusAnggotaPage extends StatefulWidget {
@@ -12,6 +13,9 @@ class StatusAnggotaPage extends StatefulWidget {
 class _StatusAnggotaPageState extends State<StatusAnggotaPage> {
   String? _selectedBulan;
   DateTime? _selectedDeadline;
+  
+  // Ambil UID Bendahara yang sedang login (sebagai Group ID)
+  final String myUid = FirebaseAuth.instance.currentUser?.uid ?? "";
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +24,7 @@ class _StatusAnggotaPageState extends State<StatusAnggotaPage> {
       appBar: AppBar(
         elevation: 0,
         backgroundColor: const Color(0xFF1A237E),
-        title: const Text("Monitoring Kas",
+        title: const Text("Monitoring Kas Grup",
             style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -41,12 +45,12 @@ class _StatusAnggotaPageState extends State<StatusAnggotaPage> {
 
           Column(
             children: [
-              // 1. DROPDOWN PILIH BULAN
+              // 1. DROPDOWN PILIH BULAN (Hanya milik grup ini)
               _buildDropdownSection(),
 
               const SizedBox(height: 10),
 
-              // 2. LIST ANGGOTA
+              // 2. LIST ANGGOTA (Hanya milik grup ini)
               Expanded(
                 child: _buildMemberList(),
               ),
@@ -57,7 +61,7 @@ class _StatusAnggotaPageState extends State<StatusAnggotaPage> {
     );
   }
 
-  // WIDGET DROPDOWN AMBIL DATA DARI FIREBASE KAS_DEADLINE
+  // WIDGET DROPDOWN PERIODE
   Widget _buildDropdownSection() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
@@ -66,14 +70,15 @@ class _StatusAnggotaPageState extends State<StatusAnggotaPage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 15,
-              offset: const Offset(0, 5))
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))
         ],
       ),
       child: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('kas_deadline').snapshots(),
+        // FILTER: Hanya ambil tagihan yang dibuat oleh bendahara ini
+        stream: FirebaseFirestore.instance
+            .collection('kas_deadline')
+            .where('groupId', isEqualTo: myUid)
+            .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: LinearProgressIndicator());
@@ -83,11 +88,11 @@ class _StatusAnggotaPageState extends State<StatusAnggotaPage> {
           if (docs.isEmpty) {
             return const Padding(
               padding: EdgeInsets.all(15.0),
-              child: Center(child: Text("Belum ada daftar tagihan.")),
+              child: Center(child: Text("Belum ada tagihan di grup Anda.")),
             );
           }
 
-          // Set default value jika belum terpilih
+          // Auto-select bulan pertama jika belum ada yang terpilih
           if (_selectedBulan == null && docs.isNotEmpty) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               setState(() {
@@ -128,23 +133,25 @@ class _StatusAnggotaPageState extends State<StatusAnggotaPage> {
     );
   }
 
-  // WIDGET LIST SEMUA ANGGOTA DENGAN PENGECEKAN STATUS & DEADLINE
+  // WIDGET LIST ANGGOTA
   Widget _buildMemberList() {
     if (_selectedBulan == null) {
-      return const Center(child: Text("Silahkan buat tagihan terlebih dahulu."));
+      return const Center(child: Text("Silahkan pilih periode iuran."));
     }
 
     return StreamBuilder<QuerySnapshot>(
+      // FILTER: Hanya ambil anggota yang memiliki groupId yang sama dengan bendahara
       stream: FirebaseFirestore.instance
           .collection('users')
           .where('role', isEqualTo: 'anggota')
+          .where('groupId', isEqualTo: myUid)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const Center(child: Text("Tidak ada data anggota."));
+          return _buildEmptyState("Belum ada anggota yang bergabung di grup Anda.");
         }
 
         return ListView.builder(
@@ -152,49 +159,54 @@ class _StatusAnggotaPageState extends State<StatusAnggotaPage> {
           padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
           itemBuilder: (context, index) {
             var user = snapshot.data!.docs[index];
-            String uid = user.id;
-            String email = user['email'];
-            String namaPanggilan = email.split('@')[0].toUpperCase();
+            String memberUid = user['uid'];
+            String nama = user['name'] ?? "Anggota";
+            String email = user['email'] ?? "-";
 
-            // STREAM UNTUK CEK APAKAH USER SUDAH BAYAR DI BULAN YANG DIPILIH
-            return StreamBuilder<DocumentSnapshot>(
+            // CEK STATUS PEMBAYARAN ANGGOTA INI
+            return StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('pembayaran')
-                  .doc("${uid}_$_selectedBulan")
+                  .where('uid_pengirim', isEqualTo: memberUid)
+                  .where('bulan', isEqualTo: _selectedBulan)
+                  .where('groupId', isEqualTo: myUid)
+                  .limit(1)
                   .snapshots(),
               builder: (context, paySnap) {
-                // LOGIKA DEADLINE
+                // Logika Deadline
                 DateTime now = DateTime.now();
                 bool isOverdue = _selectedDeadline != null && now.isAfter(_selectedDeadline!);
 
-                // 1. Status Default (Jika data pembayaran TIDAK ADA)
-                String statusText = isOverdue ? "Menunggak (Lewat Batas)" : "Belum Bayar";
-                Color statusColor = isOverdue ? Colors.blueGrey[800]! : Colors.red;
+                // Default Status (Belum Bayar)
+                String statusText = isOverdue ? "Menunggak (Lewat Deadline)" : "Belum Bayar";
+                Color statusColor = isOverdue ? Colors.blueGrey[900]! : Colors.red[700]!;
                 IconData statusIcon = isOverdue ? Icons.timer_off_outlined : Icons.warning_amber_rounded;
                 String badgeText = isOverdue ? "TELAT" : "TAGIH";
 
-                // 2. Status Jika data pembayaran ADA (ada di koleksi pembayaran)
-                if (paySnap.hasData && paySnap.data!.exists) {
-                  String s = paySnap.data!['status'];
+                // Jika data pembayaran ditemukan
+                if (paySnap.hasData && paySnap.data!.docs.isNotEmpty) {
+                  var payData = paySnap.data!.docs.first.data() as Map<String, dynamic>;
+                  String s = payData['status'];
+
                   if (s == 'disetujui') {
                     statusText = "Lunas";
-                    statusColor = Colors.green;
+                    statusColor = Colors.green[700]!;
                     statusIcon = Icons.verified_rounded;
                     badgeText = "AMAN";
                   } else if (s == 'pending') {
                     statusText = "Menunggu Verifikasi";
-                    statusColor = Colors.orange;
+                    statusColor = Colors.orange[800]!;
                     statusIcon = Icons.hourglass_top_rounded;
                     badgeText = "CEK";
                   } else if (s == 'ditolak') {
-                    statusText = "Ditolak / Bermasalah";
+                    statusText = "Pembayaran Ditolak";
                     statusColor = Colors.redAccent;
                     statusIcon = Icons.error_outline_rounded;
                     badgeText = "REVISI";
                   }
                 }
 
-                return _buildMemberCard(namaPanggilan, email, statusText, statusColor, statusIcon, badgeText);
+                return _buildMemberCard(nama, email, statusText, statusColor, statusIcon, badgeText);
               },
             );
           },
@@ -203,8 +215,8 @@ class _StatusAnggotaPageState extends State<StatusAnggotaPage> {
     );
   }
 
-  // WIDGET KARTU ANGGOTA INDIVIDUAL
-  Widget _buildMemberCard(String initial, String email, String status, Color color, IconData icon, String badge) {
+  // WIDGET KARTU ANGGOTA
+  Widget _buildMemberCard(String nama, String email, String status, Color color, IconData icon, String badge) {
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
       padding: const EdgeInsets.all(15),
@@ -217,29 +229,30 @@ class _StatusAnggotaPageState extends State<StatusAnggotaPage> {
       ),
       child: Row(
         children: [
-          // Avatar dengan Inisial
           CircleAvatar(
             radius: 25,
             backgroundColor: color.withOpacity(0.1),
             child: Text(
-              initial.isNotEmpty ? initial.substring(0, 1) : "?",
+              nama.substring(0, 1).toUpperCase(),
               style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 18),
             ),
           ),
           const SizedBox(width: 15),
-          
-          // Informasi Nama & Status
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  email,
+                  nama,
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF2D3142)),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 4),
+                Text(
+                  email,
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 6),
                 Row(
                   children: [
                     Icon(icon, size: 14, color: color),
@@ -247,7 +260,7 @@ class _StatusAnggotaPageState extends State<StatusAnggotaPage> {
                     Flexible(
                       child: Text(
                         status,
-                        style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w500),
+                        style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w600),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -256,16 +269,11 @@ class _StatusAnggotaPageState extends State<StatusAnggotaPage> {
               ],
             ),
           ),
-
-          // Badge Status
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: color,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(color: color.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 3))
-              ],
+              borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
               badge,
@@ -273,6 +281,22 @@ class _StatusAnggotaPageState extends State<StatusAnggotaPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(String msg) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.group_off_rounded, size: 80, color: Colors.grey[300]),
+            const SizedBox(height: 15),
+            Text(msg, textAlign: TextAlign.center, style: TextStyle(color: Colors.grey[500])),
+          ],
+        ),
       ),
     );
   }

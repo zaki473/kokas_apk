@@ -33,7 +33,7 @@ class _EditTransaksiPageState extends State<EditTransaksiPage> {
       try {
         await FirebaseFirestore.instance.collection('transactions').doc(widget.docId).update({
           'keterangan': _ketController.text,
-          'jumlah': int.parse(_jumlahController.text.replaceAll('.', '')),
+          'jumlah': int.parse(_jumlahController.text.replaceAll('.', '').replaceAll('Rp ', '')),
           'type': _type,
         });
 

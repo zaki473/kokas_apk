@@ -2,16 +2,47 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'edit_transaksi_page.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-class RekapPage extends StatelessWidget {
+class RekapPage extends StatefulWidget {
   const RekapPage({super.key});
 
-  // Fungsi Format Rupiah
+  @override
+  State<RekapPage> createState() => _RekapPageState();
+}
+
+class _RekapPageState extends State<RekapPage> {
+  String? _userGroupId;
+  bool _isLoadingGroupId = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserGroupId();
+  }
+
+  // 1. Ambil GroupID milik user yang sedang login
+  Future<void> _loadUserGroupId() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      if (userDoc.exists) {
+        setState(() {
+          _userGroupId = userDoc['groupId'];
+          _isLoadingGroupId = false;
+        });
+      }
+    }
+  }
+
   String _formatCurrency(double value) {
     return NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0).format(value);
   }
 
-  // Fungsi Format Tanggal
   String _formatDate(Timestamp ts) {
     return DateFormat('dd MMM yyyy, HH:mm').format(ts.toDate());
   }
@@ -19,7 +50,7 @@ class RekapPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white, // Latar belakang putih bersih
+      backgroundColor: const Color(0xFFF4F6F8), // Latar belakang abu muda sesuai tema
       appBar: AppBar(
         elevation: 0,
         backgroundColor: const Color(0xFF1A237E), // Navy Dashboard
@@ -27,71 +58,93 @@ class RekapPage extends StatelessWidget {
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('transactions')
-            .orderBy('date', descending: true)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return _buildEmptyState();
-          }
-          
-          return ListView.separated(
-            padding: const EdgeInsets.all(15),
-            itemCount: snapshot.data!.docs.length,
-            separatorBuilder: (context, index) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              var doc = snapshot.data!.docs[index];
-              var data = doc.data() as Map<String, dynamic>;
-              String id = doc.id;
-              bool isMasuk = data['type'] == 'masuk';
+      body: _isLoadingGroupId
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF1A237E)))
+          : StreamBuilder<QuerySnapshot>(
+              // 2. Filter berdasarkan _userGroupId yang sudah didapat
+              stream: FirebaseFirestore.instance
+                  .collection('transactions')
+                  .where('groupId', isEqualTo: _userGroupId)
+                  .orderBy('date', descending: true) // Urutkan dari yang terbaru
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(child: Text("Terjadi Kesalahan: ${snapshot.error}"));
+                }
 
-              return ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                leading: CircleAvatar(
-                  backgroundColor: isMasuk ? Colors.green[50] : Colors.red[50],
-                  child: Icon(
-                    isMasuk ? Icons.arrow_downward : Icons.arrow_upward,
-                    color: isMasuk ? Colors.green : Colors.red,
-                    size: 20,
-                  ),
-                ),
-                title: Text(
-                  data['keterangan'] ?? "-",
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                ),
-                subtitle: Text(
-                  "${_formatDate(data['date'])}\n${isMasuk ? 'Masuk' : 'Keluar'}",
-                  style: const TextStyle(fontSize: 12),
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _formatCurrency((data['jumlah'] ?? 0).toDouble()),
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: isMasuk ? Colors.green[700] : Colors.red[700],
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return _buildEmptyState();
+                }
+                
+                return ListView.builder(
+                  padding: const EdgeInsets.all(15),
+                  itemCount: snapshot.data!.docs.length,
+                  itemBuilder: (context, index) {
+                    var doc = snapshot.data!.docs[index];
+                    var data = doc.data() as Map<String, dynamic>;
+                    String id = doc.id;
+                    bool isMasuk = data['type'] == 'masuk';
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(15),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    _buildPopupMenu(context, id, data),
-                  ],
-                ),
-              );
-            },
-          );
-        },
-      ),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+                        leading: CircleAvatar(
+                          backgroundColor: isMasuk ? Colors.green[50] : Colors.red[50],
+                          child: Icon(
+                            isMasuk ? Icons.add_circle_outline : Icons.remove_circle_outline,
+                            color: isMasuk ? Colors.green : Colors.red,
+                            size: 24,
+                          ),
+                        ),
+                        title: Text(
+                          data['keterangan'] ?? "-",
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 4),
+                            Text(_formatDate(data['date']), style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                            Text(isMasuk ? 'Uang Masuk' : 'Uang Keluar', 
+                              style: TextStyle(fontSize: 11, color: isMasuk ? Colors.green : Colors.red, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              "${isMasuk ? '+' : '-'} ${_formatCurrency((data['jumlah'] ?? 0).toDouble())}",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: isMasuk ? Colors.green[700] : Colors.red[700],
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            _buildPopupMenu(context, id, data),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
     );
   }
 
-  // WIDGET POPUP MENU UNTUK EDIT/HAPUS (LEBIH BERSIH)
   Widget _buildPopupMenu(BuildContext context, String id, Map<String, dynamic> data) {
     return PopupMenuButton<String>(
       onSelected: (value) {
@@ -104,8 +157,8 @@ class RekapPage extends StatelessWidget {
         }
       },
       itemBuilder: (context) => [
-        const PopupMenuItem(value: 'edit', child: Text("Edit")),
-        const PopupMenuItem(value: 'delete', child: Text("Hapus", style: TextStyle(color: Colors.red))),
+        const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text("Edit")])),
+        const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, size: 18, color: Colors.red), SizedBox(width: 8), Text("Hapus", style: TextStyle(color: Colors.red))])),
       ],
       icon: const Icon(Icons.more_vert, color: Colors.grey),
     );
@@ -116,9 +169,11 @@ class RekapPage extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.inbox_rounded, size: 60, color: Colors.grey[300]),
-          const SizedBox(height: 10),
-          Text("Tidak ada transaksi", style: TextStyle(color: Colors.grey[400])),
+          Icon(Icons.receipt_long_rounded, size: 80, color: Colors.grey[200]),
+          const SizedBox(height: 15),
+          Text("Belum ada riwayat transaksi\ndi grup ini.", 
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey[400], fontSize: 14)),
         ],
       ),
     );
@@ -128,17 +183,19 @@ class RekapPage extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Hapus?"),
-        content: const Text("Data transaksi ini akan dihapus permanen."),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: const Text("Hapus Transaksi?"),
+        content: const Text("Data ini akan dihapus permanen dari riwayat grup."),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Batal")),
-          TextButton(
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () async {
               await FirebaseFirestore.instance.collection('transactions').doc(id).delete();
               if (!context.mounted) return;
               Navigator.pop(context);
             },
-            child: const Text("Hapus", style: TextStyle(color: Colors.red)),
+            child: const Text("Hapus"),
           ),
         ],
       ),

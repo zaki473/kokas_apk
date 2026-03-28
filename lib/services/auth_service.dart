@@ -5,33 +5,27 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  Future<String?> registerAnggota(String email, String password, String nama) async {
+  // Di dalam AuthService
+  Future<String?> registerUser(
+    String email,
+    String password,
+    String nama,
+  ) async {
     try {
-      // Firebase akan otomatis mengecek email di sini
-      UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
-          email: email, password: password);
-      
-      // Jika berhasil, simpan ke Firestore
-      await _firestore.collection('users').doc(userCredential.user!.uid).set({
-        'nama': nama,
+      UserCredential res = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      await _firestore.collection('users').doc(res.user!.uid).set({
+        'uid': res.user!.uid,
+        'name': nama,
         'email': email,
-        'role': 'anggota',
-        'createdAt': DateTime.now(),
+        'role': 'none', // Default awal
+        'groupId': '', // Belum punya grup
       });
-      
-      return null; // Berhasil
-    } on FirebaseAuthException catch (e) {
-      // INI ADALAH BAGIAN VALIDASI EMAIL UNIK
-      if (e.code == 'email-already-in-use') {
-        return "Email ini sudah terdaftar. Gunakan email lain atau silakan login.";
-      } else if (e.code == 'weak-password') {
-        return "Password terlalu lemah.";
-      } else if (e.code == 'invalid-email') {
-        return "Format email tidak valid.";
-      }
-      return e.message; // Pesan error lainnya dari Firebase
+      return null;
     } catch (e) {
-      return "Terjadi kesalahan: $e";
+      return e.toString();
     }
   }
 
@@ -39,16 +33,23 @@ class AuthService {
   Future<Map<String, dynamic>?> loginUser(String email, String password) async {
     try {
       UserCredential userCredential = await _auth.signInWithEmailAndPassword(
-          email: email, password: password);
-      
-      DocumentSnapshot userDoc = await _firestore.collection('users').doc(userCredential.user!.uid).get();
-      
+        email: email,
+        password: password,
+      );
+
+      DocumentSnapshot userDoc = await _firestore
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .get();
+
       if (userDoc.exists) {
         return userDoc.data() as Map<String, dynamic>;
       }
       return null;
     } on FirebaseAuthException catch (e) {
-      if (e.code == 'user-not-found' || e.code == 'wrong-password' || e.code == 'invalid-credential') {
+      if (e.code == 'user-not-found' ||
+          e.code == 'wrong-password' ||
+          e.code == 'invalid-credential') {
         throw "Email atau Password salah.";
       }
       rethrow;

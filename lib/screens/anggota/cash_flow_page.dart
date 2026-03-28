@@ -1,16 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Tambahkan ini
 import 'package:intl/intl.dart';
 
-class CashFlowPage extends StatelessWidget {
+class CashFlowPage extends StatefulWidget {
   const CashFlowPage({super.key});
 
-  // Fungsi Format Rupiah
+  @override
+  State<CashFlowPage> createState() => _CashFlowPageState();
+}
+
+class _CashFlowPageState extends State<CashFlowPage> {
+  final Color primaryNavy = const Color(0xFF1A237E);
+  final Color backgroundColor = const Color(0xFFF4F6F8);
+  
+  String? _userGroupId;
+  bool _isLoadingUser = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserGroupId();
+  }
+
+  // 1. Ambil GroupID milik user agar data tidak kecampur dengan grup lain
+  Future<void> _loadUserGroupId() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      if (userDoc.exists) {
+        setState(() {
+          _userGroupId = userDoc['groupId'];
+          _isLoadingUser = false;
+        });
+      }
+    }
+  }
+
   String _formatCurrency(double value) {
     return NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0).format(value);
   }
 
-  // Fungsi Format Tanggal
   String _formatDate(Timestamp ts) {
     return DateFormat('dd MMM yyyy').format(ts.toDate());
   }
@@ -18,61 +52,68 @@ class CashFlowPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8),
+      backgroundColor: backgroundColor,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF1A237E), // Navy Dashboard
+        backgroundColor: primaryNavy,
         title: const Text("Riwayat Cash Flow", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: Stack(
-        children: [
-          // Background Header Melengkung
-          Container(
-            height: 80,
-            decoration: const BoxDecoration(
-              color: Color(0xFF1A237E),
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(30),
-                bottomRight: Radius.circular(30),
+      body: _isLoadingUser 
+      ? Center(child: CircularProgressIndicator(color: primaryNavy))
+      : Stack(
+          children: [
+            // Background Header Melengkung
+            Container(
+              height: 80,
+              decoration: BoxDecoration(
+                color: primaryNavy,
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(30),
+                  bottomRight: Radius.circular(30),
+                ),
               ),
             ),
-          ),
-          
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('transactions')
-                .orderBy('date', descending: true)
-                .snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator(color: Colors.white));
-              }
-              
-              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                return _buildEmptyState();
-              }
-              
-              return ListView.builder(
-                padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
-                itemCount: snapshot.data!.docs.length,
-                itemBuilder: (context, index) {
-                  var doc = snapshot.data!.docs[index];
-                  var data = doc.data() as Map<String, dynamic>;
-                  bool isMasuk = data['type'] == 'masuk';
+            
+            StreamBuilder<QuerySnapshot>(
+              // 2. Filter berdasarkan groupId dan urutkan berdasarkan tanggal
+              stream: FirebaseFirestore.instance
+                  .collection('transactions')
+                  .where('groupId', isEqualTo: _userGroupId) // 🔥 FILTER DI SINI
+                  .orderBy('date', descending: true)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(child: Text("Terjadi kesalahan: ${snapshot.error}", style: const TextStyle(color: Colors.red)));
+                }
 
-                  return _buildTransactionCard(data, isMasuk);
-                },
-              );
-            },
-          ),
-        ],
-      ),
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator(color: Colors.white));
+                }
+                
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return _buildEmptyState();
+                }
+                
+                return ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+                  itemCount: snapshot.data!.docs.length,
+                  itemBuilder: (context, index) {
+                    var doc = snapshot.data!.docs[index];
+                    var data = doc.data() as Map<String, dynamic>;
+                    bool isMasuk = data['type'] == 'masuk';
+
+                    return _buildTransactionCard(data, isMasuk);
+                  },
+                );
+              },
+            ),
+          ],
+        ),
     );
   }
 
-  // WIDGET CARD TRANSAKSI (GAYA PREMIUM)
   Widget _buildTransactionCard(Map<String, dynamic> data, bool isMasuk) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -112,7 +153,7 @@ class CashFlowPage extends StatelessWidget {
           children: [
             const SizedBox(height: 4),
             Text(
-              _formatDate(data['date']),
+              _formatDate(data['date'] as Timestamp),
               style: TextStyle(fontSize: 12, color: Colors.grey[500]),
             ),
           ],
@@ -129,7 +170,6 @@ class CashFlowPage extends StatelessWidget {
     );
   }
 
-  // TAMPILAN JIKA DATA KOSONG
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -137,9 +177,10 @@ class CashFlowPage extends StatelessWidget {
         children: [
           Icon(Icons.receipt_long_rounded, size: 80, color: Colors.grey[300]),
           const SizedBox(height: 15),
-          Text(
-            "Belum ada riwayat transaksi",
-            style: TextStyle(color: Colors.grey[500], fontSize: 16),
+          const Text(
+            "Belum ada riwayat transaksi\ndi grup Anda.",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey, fontSize: 16),
           ),
         ],
       ),

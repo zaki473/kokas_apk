@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class PengumumanPage extends StatefulWidget {
   const PengumumanPage({super.key});
@@ -18,10 +19,15 @@ class _PengumumanPageState extends State<PengumumanPage> {
 
     setState(() => _isSending = true);
     try {
+      final String? myGroupId = FirebaseAuth.instance.currentUser?.uid;
+
+      if (myGroupId == null) throw "User tidak terautentikasi";
+
       await FirebaseFirestore.instance.collection('announcements').add({
         'pesan': _controller.text.trim(),
-        'tanggal': DateTime.now(),
+        'tanggal': FieldValue.serverTimestamp(), // Menggunakan waktu server
         'author': 'Bendahara',
+        'groupId': myGroupId,
       });
 
       _controller.clear();
@@ -48,14 +54,13 @@ class _PengumumanPageState extends State<PengumumanPage> {
       backgroundColor: const Color(0xFFF4F6F8),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF1A237E), // Navy Dashboard
+        backgroundColor: const Color(0xFF1A237E),
         title: const Text("Broadcast Pengumuman", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Stack(
         children: [
-          // Background Navy Header
           Container(
             height: 100,
             decoration: const BoxDecoration(
@@ -66,15 +71,10 @@ class _PengumumanPageState extends State<PengumumanPage> {
               ),
             ),
           ),
-
           Column(
             children: [
-              // --- INPUT BOX ---
               _buildInputSection(),
-
               const SizedBox(height: 10),
-
-              // --- LIST PENGUMUMAN ---
               Expanded(
                 child: _buildAnnouncementList(),
               ),
@@ -85,7 +85,6 @@ class _PengumumanPageState extends State<PengumumanPage> {
     );
   }
 
-  // WIDGET INPUT PENGUMUMAN (PREMIUM BOX)
   Widget _buildInputSection() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -148,11 +147,20 @@ class _PengumumanPageState extends State<PengumumanPage> {
     );
   }
 
-  // WIDGET STREAM LIST PENGUMUMAN
   Widget _buildAnnouncementList() {
+    final String? myGroupId = FirebaseAuth.instance.currentUser?.uid;
+    
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('announcements').orderBy('tanggal', descending: true).snapshots(),
+      // HANYA MENGGUNAKAN WHERE, ORDER BY DIHAPUS AGAR TIDAK BUTUH INDEX
+      stream: FirebaseFirestore.instance
+          .collection('announcements')
+          .where('groupId', isEqualTo: myGroupId)
+          .snapshots(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text("Terjadi Kesalahan: ${snapshot.error}"));
+        }
+
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -170,22 +178,39 @@ class _PengumumanPageState extends State<PengumumanPage> {
           );
         }
 
+        // --- PROSES SORTIR MANUAL DI SISI APLIKASI ---
+        List<QueryDocumentSnapshot> docs = snapshot.data!.docs;
+        docs.sort((a, b) {
+          var dataA = a.data() as Map<String, dynamic>;
+          var dataB = b.data() as Map<String, dynamic>;
+          
+          // Gunakan Timestamp.now() jika tanggal belum ada/null (saat baru upload)
+          Timestamp tA = dataA['tanggal'] ?? Timestamp.now();
+          Timestamp tB = dataB['tanggal'] ?? Timestamp.now();
+          
+          return tB.compareTo(tA); // Mengurutkan dari terbaru ke terlama
+        });
+
         return ListView.builder(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          itemCount: snapshot.data!.docs.length,
+          itemCount: docs.length,
           itemBuilder: (context, index) {
-            var doc = snapshot.data!.docs[index];
+            var doc = docs[index];
             var data = doc.data() as Map<String, dynamic>;
-            String tgl = DateFormat('dd MMM yyyy, HH:mm').format(data['tanggal'].toDate());
+            
+            // Format Tanggal dengan proteksi null
+            String tglStr = "-";
+            if (data['tanggal'] != null) {
+              tglStr = DateFormat('dd MMM yyyy, HH:mm').format((data['tanggal'] as Timestamp).toDate());
+            }
 
-            return _buildAnnouncementCard(doc.id, data['pesan'], tgl);
+            return _buildAnnouncementCard(doc.id, data['pesan'] ?? "", tglStr);
           },
         );
       },
     );
   }
 
-  // WIDGET CARD PENGUMUMAN ALA "NOTICE BOARD"
   Widget _buildAnnouncementCard(String id, String pesan, String tanggal) {
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
@@ -193,7 +218,6 @@ class _PengumumanPageState extends State<PengumumanPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.02),
@@ -212,7 +236,7 @@ class _PengumumanPageState extends State<PengumumanPage> {
                 children: [
                   const Icon(Icons.account_circle, size: 20, color: Color(0xFF1A237E)),
                   const SizedBox(width: 8),
-                  Text("Bendaraha KOKAS", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[800], fontSize: 13)),
+                  Text("Bendahara KOKAS", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[800], fontSize: 13)),
                 ],
               ),
               IconButton(

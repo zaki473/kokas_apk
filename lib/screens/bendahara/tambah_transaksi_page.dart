@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class TambahTransaksiPage extends StatefulWidget {
   const TambahTransaksiPage({super.key});
@@ -13,8 +14,9 @@ class _TambahTransaksiPageState extends State<TambahTransaksiPage> {
   final _formKey = GlobalKey<FormState>();
   final _ketController = TextEditingController();
   final _jumlahController = TextEditingController();
-  String _type = 'masuk'; 
+  String _type = 'masuk';
   bool _isLoading = false;
+  final String myGroupId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
   void _simpanTransaksi() async {
     if (_formKey.currentState!.validate()) {
@@ -23,10 +25,16 @@ class _TambahTransaksiPageState extends State<TambahTransaksiPage> {
       try {
         final firestore = FirebaseFirestore.instance;
         final String keterangan = _ketController.text;
-        final int jumlah = int.parse(_jumlahController.text.replaceAll('.', '')); // Hapus titik jika ada
+        final int jumlah = int.parse(
+          _jumlahController.text.replaceAll('.', ''),
+        ); // Hapus titik jika ada
         final DateTime sekarang = DateTime.now();
 
-        final currency = NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
+        final currency = NumberFormat.currency(
+          locale: 'id',
+          symbol: 'Rp ',
+          decimalDigits: 0,
+        );
         String jumlahFormatted = currency.format(jumlah);
 
         WriteBatch batch = firestore.batch();
@@ -36,14 +44,18 @@ class _TambahTransaksiPageState extends State<TambahTransaksiPage> {
           'keterangan': keterangan,
           'jumlah': jumlah,
           'type': _type,
+          'groupId': myGroupId,
           'date': sekarang,
         });
 
         if (_type == 'keluar') {
-          DocumentReference annRef = firestore.collection('announcements').doc();
+          DocumentReference annRef = firestore
+              .collection('announcements')
+              .doc();
           batch.set(annRef, {
             'pesan': '📢 PENGELUARAN: $keterangan senilai $jumlahFormatted',
             'tanggal': sekarang,
+            'groupId': myGroupId,
           });
         }
 
@@ -60,7 +72,10 @@ class _TambahTransaksiPageState extends State<TambahTransaksiPage> {
         );
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Gagal Simpan: $e"), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text("Gagal Simpan: $e"),
+            backgroundColor: Colors.red,
+          ),
         );
       } finally {
         setState(() => _isLoading = false);
@@ -75,7 +90,10 @@ class _TambahTransaksiPageState extends State<TambahTransaksiPage> {
       appBar: AppBar(
         elevation: 0,
         backgroundColor: const Color(0xFF1A237E), // Navy Dashboard
-        title: const Text("Input Transaksi", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        title: const Text(
+          "Input Transaksi",
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+        ),
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
@@ -92,7 +110,7 @@ class _TambahTransaksiPageState extends State<TambahTransaksiPage> {
               ),
             ),
           ),
-          
+
           SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
             child: Form(
@@ -106,18 +124,44 @@ class _TambahTransaksiPageState extends State<TambahTransaksiPage> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(20),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
+                        ),
+                      ],
                     ),
                     child: Row(
                       children: [
-                        Expanded(child: _buildTypeSelector("masuk", "Uang Masuk", Icons.arrow_downward, Colors.green)),
-                        Expanded(child: _buildTypeSelector("keluar", "Uang Keluar", Icons.arrow_upward, Colors.red)),
+                        Expanded(
+                          child: _buildTypeSelector(
+                            "masuk",
+                            "Uang Masuk",
+                            Icons.arrow_downward,
+                            Colors.green,
+                          ),
+                        ),
+                        Expanded(
+                          child: _buildTypeSelector(
+                            "keluar",
+                            "Uang Keluar",
+                            Icons.arrow_upward,
+                            Colors.red,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  
+
                   const SizedBox(height: 25),
-                  const Text("Detail Transaksi", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A237E))),
+                  const Text(
+                    "Detail Transaksi",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1A237E),
+                    ),
+                  ),
                   const SizedBox(height: 15),
 
                   // --- INPUT KETERANGAN ---
@@ -141,7 +185,8 @@ class _TambahTransaksiPageState extends State<TambahTransaksiPage> {
                     prefix: "Rp ",
                     validator: (v) {
                       if (v!.isEmpty) return "Isi jumlah";
-                      if (int.tryParse(v.replaceAll('.', '')) == null) return "Harus angka";
+                      if (int.tryParse(v.replaceAll('.', '')) == null)
+                        return "Harus angka";
                       return null;
                     },
                   ),
@@ -158,19 +203,28 @@ class _TambahTransaksiPageState extends State<TambahTransaksiPage> {
                         foregroundColor: Colors.white,
                         elevation: 5,
                         shadowColor: const Color(0xFF1A237E).withOpacity(0.4),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
+                        ),
                       ),
                       onPressed: _isLoading ? null : _simpanTransaksi,
-                      child: _isLoading 
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.save_rounded),
-                              SizedBox(width: 10),
-                              Text("SIMPAN TRANSAKSI", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.1)),
-                            ],
-                          ),
+                      child: _isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.save_rounded),
+                                SizedBox(width: 10),
+                                Text(
+                                  "SIMPAN TRANSAKSI",
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.1,
+                                  ),
+                                ),
+                              ],
+                            ),
                     ),
                   ),
                 ],
@@ -183,7 +237,12 @@ class _TambahTransaksiPageState extends State<TambahTransaksiPage> {
   }
 
   // WIDGET SELECTOR MASUK/KELUAR
-  Widget _buildTypeSelector(String typeValue, String label, IconData icon, Color color) {
+  Widget _buildTypeSelector(
+    String typeValue,
+    String label,
+    IconData icon,
+    Color color,
+  ) {
     bool isSelected = _type == typeValue;
     return GestureDetector(
       onTap: () => setState(() => _type = typeValue),
@@ -197,9 +256,19 @@ class _TambahTransaksiPageState extends State<TambahTransaksiPage> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: isSelected ? Colors.white : Colors.grey, size: 20),
+            Icon(
+              icon,
+              color: isSelected ? Colors.white : Colors.grey,
+              size: 20,
+            ),
             const SizedBox(width: 8),
-            Text(label, style: TextStyle(color: isSelected ? Colors.white : Colors.grey, fontWeight: FontWeight.bold)),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.grey,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
       ),
@@ -220,7 +289,13 @@ class _TambahTransaksiPageState extends State<TambahTransaksiPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 5))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: TextFormField(
         controller: controller,
@@ -232,10 +307,16 @@ class _TambahTransaksiPageState extends State<TambahTransaksiPage> {
           hintText: hint,
           prefixText: prefix,
           prefixIcon: Icon(icon, color: const Color(0xFF1A237E)),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(18),
+            borderSide: BorderSide.none,
+          ),
           filled: true,
           fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+          contentPadding: const EdgeInsets.symmetric(
+            vertical: 18,
+            horizontal: 20,
+          ),
         ),
       ),
     );

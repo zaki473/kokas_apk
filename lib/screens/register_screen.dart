@@ -31,7 +31,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
 
-      String? error = await AuthService().registerAnggota(
+      // Gunakan fungsi register yang menset role 'none'
+      String? error = await AuthService().registerUser(
         _emailController.text.trim(),
         _passwordController.text.trim(),
         _namaController.text.trim(),
@@ -41,18 +42,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() => _isLoading = false);
 
       if (error == null) {
+        // Setelah daftar, arahkan ke SetupGroupScreen (setelah otomatis login)
+        // Atau arahkan balik ke login dengan pesan sukses
+        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Registrasi Berhasil! Silakan Login."),
-            backgroundColor: Colors.indigo,
-            behavior: SnackBarBehavior.floating,
-          ),
+          const SnackBar(content: Text("Berhasil! Silahkan Login.")),
         );
-        Navigator.pop(context); 
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(error), 
+            content: Text(error),
             backgroundColor: Colors.redAccent,
             behavior: SnackBarBehavior.floating,
           ),
@@ -69,7 +68,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text("Buat Akun Baru", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text(
+          "Buat Akun Baru",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
       ),
       body: AnimatedOpacity(
         duration: const Duration(milliseconds: 600),
@@ -99,19 +101,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       color: Colors.white.withOpacity(0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.person_add_rounded, size: 70, color: Colors.white),
+                    child: const Icon(
+                      Icons.person_add_rounded,
+                      size: 70,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(height: 30),
                   const Text(
                     "Daftar Anggota",
-                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
                   const Text(
                     "Gabung KOKAS untuk kelola kas bersama",
                     style: TextStyle(color: Colors.white70, fontSize: 14),
                   ),
                   const SizedBox(height: 40),
-                  
+
                   // Input Nama
                   _buildTextField(
                     controller: _namaController,
@@ -138,16 +148,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     decoration: InputDecoration(
                       labelText: "Password",
                       labelStyle: const TextStyle(color: Colors.white70),
-                      prefixIcon: const Icon(Icons.lock_outline_rounded, color: Colors.white70),
+                      prefixIcon: const Icon(
+                        Icons.lock_outline_rounded,
+                        color: Colors.white70,
+                      ),
                       suffixIcon: IconButton(
-                        icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: Colors.white70),
-                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                          color: Colors.white70,
+                        ),
+                        onPressed: () => setState(
+                          () => _obscurePassword = !_obscurePassword,
+                        ),
                       ),
                       filled: true,
                       fillColor: Colors.white.withOpacity(0.1),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(15),
-                        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                        borderSide: BorderSide(
+                          color: Colors.white.withOpacity(0.1),
+                        ),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(15),
@@ -160,7 +182,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     validator: AppValidators.validatePassword,
                   ),
-                  
+
                   const SizedBox(height: 45),
 
                   // Tombol Daftar (Putih Kontras)
@@ -171,20 +193,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.white,
                         foregroundColor: const Color(0xFF1A237E),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15),
+                        ),
                         elevation: 0,
                       ),
                       onPressed: _isLoading ? null : _handleRegister,
                       child: _isLoading
                           ? const SizedBox(
-                              height: 20, width: 20,
-                              child: CircularProgressIndicator(color: Color(0xFF1A237E), strokeWidth: 3),
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                color: Color(0xFF1A237E),
+                                strokeWidth: 3,
+                              ),
                             )
-                          : const Text("DAFTAR SEKARANG", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.1)),
+                          : const Text(
+                              "DAFTAR SEKARANG",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                letterSpacing: 1.1,
+                              ),
+                            ),
                     ),
                   ),
                   const SizedBox(height: 25),
-                  
+
                   // Tombol Kembali
                   TextButton(
                     onPressed: () => Navigator.pop(context),
@@ -195,7 +230,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         children: [
                           TextSpan(
                             text: "Login di sini",
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              decoration: TextDecoration.underline,
+                            ),
                           ),
                         ],
                       ),

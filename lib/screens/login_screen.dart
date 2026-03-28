@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; 
+import 'package:flutter/services.dart';
 import '../services/auth_service.dart';
 import '../utils/validators.dart';
 import 'register_screen.dart';
 import 'bendahara_screen.dart';
 import 'anggota_screen.dart';
+import 'package:kokas/screens/setup_group_page.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -40,7 +41,10 @@ class _LoginScreenState extends State<LoginScreen> {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Keluar Aplikasi?", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          "Keluar Aplikasi?",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         content: const Text("Apakah Anda yakin ingin menutup aplikasi KOKAS?"),
         actions: [
           TextButton(
@@ -50,7 +54,9 @@ class _LoginScreenState extends State<LoginScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF1A237E),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             onPressed: () => SystemNavigator.pop(),
             child: const Text("KELUAR", style: TextStyle(color: Colors.white)),
@@ -71,21 +77,23 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (userData != null) {
           String role = userData['role'];
+          String groupId = userData['groupId'] ?? ''; // Ambil groupId
+
           if (!mounted) return;
 
-          Widget destination = (role == 'bendahara') 
-              ? const BendaharaScreen() 
-              : const AnggotaScreen();
+          Widget destination;
+          if (role == 'none' || groupId == '') {
+            // JIKA BELUM SET-UP GRUP
+            destination = const SetupGroupPage();
+          } else if (role == 'bendahara') {
+            destination = const BendaharaScreen();
+          } else {
+            destination = const AnggotaScreen();
+          }
 
           Navigator.pushAndRemoveUntil(
             context,
-            PageRouteBuilder(
-              pageBuilder: (context, anim, secondaryAnim) => destination,
-              transitionsBuilder: (context, anim, secondaryAnim, child) {
-                return FadeTransition(opacity: anim, child: child);
-              },
-              transitionDuration: const Duration(milliseconds: 800),
-            ),
+            MaterialPageRoute(builder: (context) => destination),
             (route) => false,
           );
         }
@@ -118,7 +126,10 @@ class _LoginScreenState extends State<LoginScreen> {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [Color(0xFF1A237E), Color(0xFF0D1242)], // Gradasi Navy Gelap
+              colors: [
+                Color(0xFF1A237E),
+                Color(0xFF0D1242),
+              ], // Gradasi Navy Gelap
             ),
           ),
           child: SafeArea(
@@ -131,18 +142,27 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: [
                     const SizedBox(height: 60),
                     // Logo/Icon Putih
-                    const Icon(Icons.account_balance_wallet_rounded, size: 80, color: Colors.white),
+                    const Icon(
+                      Icons.account_balance_wallet_rounded,
+                      size: 80,
+                      color: Colors.white,
+                    ),
                     const SizedBox(height: 20),
                     const Text(
                       "KOKAS LOGIN",
-                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 2),
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 2,
+                      ),
                     ),
                     const Text(
                       "Kelola kas organisasi dengan aman",
                       style: TextStyle(color: Colors.white70, fontSize: 14),
                     ),
                     const SizedBox(height: 50),
-                    
+
                     // INPUT EMAIL (MODERN WHITE STYLE)
                     _buildTextField(
                       controller: _emailController,
@@ -151,7 +171,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       validator: AppValidators.validateEmail,
                     ),
                     const SizedBox(height: 20),
-                    
+
                     // INPUT PASSWORD
                     _buildTextField(
                       controller: _passwordController,
@@ -159,7 +179,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       icon: Icons.lock_outline,
                       isPassword: true,
                       obscureText: _obscurePassword,
-                      toggleObscure: () => setState(() => _obscurePassword = !_obscurePassword),
+                      toggleObscure: () =>
+                          setState(() => _obscurePassword = !_obscurePassword),
                       validator: AppValidators.validatePassword,
                     ),
                     const SizedBox(height: 40),
@@ -172,29 +193,41 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
                           foregroundColor: const Color(0xFF1A237E),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(15),
+                          ),
                           elevation: 0,
                         ),
                         onPressed: _isLoading ? null : _handleLogin,
                         child: _isLoading
                             ? const SizedBox(
-                                height: 20, width: 20,
-                                child: CircularProgressIndicator(color: Color(0xFF1A237E), strokeWidth: 3),
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  color: Color(0xFF1A237E),
+                                  strokeWidth: 3,
+                                ),
                               )
                             : const Text(
                                 "MASUK SEKARANG",
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1,
+                                ),
                               ),
                       ),
                     ),
-                    
+
                     const SizedBox(height: 25),
-                    
+
                     // DAFTAR AKUN
                     TextButton(
                       onPressed: () => Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const RegisterScreen(),
+                        ),
                       ),
                       child: RichText(
                         text: const TextSpan(
@@ -203,7 +236,11 @@ class _LoginScreenState extends State<LoginScreen> {
                           children: [
                             TextSpan(
                               text: "Daftar Disini",
-                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                decoration: TextDecoration.underline,
+                              ),
                             ),
                           ],
                         ),
@@ -215,7 +252,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     // TOMBOL KELUAR
                     TextButton.icon(
                       onPressed: _showExitDialog,
-                      icon: const Icon(Icons.power_settings_new_rounded, color: Colors.white54, size: 20),
+                      icon: const Icon(
+                        Icons.power_settings_new_rounded,
+                        color: Colors.white54,
+                        size: 20,
+                      ),
                       label: const Text(
                         "Keluar Aplikasi",
                         style: TextStyle(color: Colors.white54, fontSize: 14),
@@ -251,11 +292,14 @@ class _LoginScreenState extends State<LoginScreen> {
         labelText: label,
         labelStyle: const TextStyle(color: Colors.white70),
         prefixIcon: Icon(icon, color: Colors.white70),
-        suffixIcon: isPassword 
+        suffixIcon: isPassword
             ? IconButton(
-                icon: Icon(obscureText ? Icons.visibility_off : Icons.visibility, color: Colors.white70),
+                icon: Icon(
+                  obscureText ? Icons.visibility_off : Icons.visibility,
+                  color: Colors.white70,
+                ),
                 onPressed: toggleObscure,
-              ) 
+              )
             : null,
         filled: true,
         fillColor: Colors.white.withOpacity(0.1),
