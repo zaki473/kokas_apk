@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'edit_transaksi_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '/services/error_service.dart'; 
 
 class RekapPage extends StatefulWidget {
   const RekapPage({super.key});
@@ -15,45 +16,59 @@ class _RekapPageState extends State<RekapPage> {
   String? _userGroupId;
   bool _isLoadingGroupId = true;
 
+  // Optimasi: Definisikan formatters di luar build agar hemat memori
+  final _currencyFormat = NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
+  final _dateFormat = DateFormat('dd MMM yyyy, HH:mm');
+
   @override
   void initState() {
     super.initState();
     _loadUserGroupId();
   }
 
-  // 1. Ambil GroupID milik user yang sedang login
   Future<void> _loadUserGroupId() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
 
-      if (userDoc.exists) {
-        setState(() {
-          _userGroupId = userDoc['groupId'];
-          _isLoadingGroupId = false;
-        });
+        if (userDoc.exists && mounted) {
+          setState(() {
+            _userGroupId = userDoc['groupId'];
+            _isLoadingGroupId = false;
+          });
+        }
       }
+    } catch (e) {
+      if (!context.mounted) return;
+      ErrorService.show(context, e);
+      if (mounted) setState(() => _isLoadingGroupId = false);
     }
   }
 
   String _formatCurrency(double value) {
-    return NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0).format(value);
+    return _currencyFormat.format(value);
   }
 
-  String _formatDate(Timestamp ts) {
-    return DateFormat('dd MMM yyyy, HH:mm').format(ts.toDate());
+  String _formatDate(dynamic ts) {
+    // Safety check: jika server timestamp belum turun, gunakan waktu sekarang sebagai placeholder
+    if (ts == null) return "..."; 
+    if (ts is Timestamp) {
+      return _dateFormat.format(ts.toDate());
+    }
+    return "-";
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8), // Latar belakang abu muda sesuai tema
+      backgroundColor: const Color(0xFFF4F6F8),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF1A237E), // Navy Dashboard
+        backgroundColor: const Color(0xFF1A237E),
         title: const Text("Rekap Transaksi", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -61,15 +76,24 @@ class _RekapPageState extends State<RekapPage> {
       body: _isLoadingGroupId
           ? const Center(child: CircularProgressIndicator(color: Color(0xFF1A237E)))
           : StreamBuilder<QuerySnapshot>(
-              // 2. Filter berdasarkan _userGroupId yang sudah didapat
               stream: FirebaseFirestore.instance
                   .collection('transactions')
                   .where('groupId', isEqualTo: _userGroupId)
-                  .orderBy('date', descending: true) // Urutkan dari yang terbaru
+                  .orderBy('date', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
+                // Handle error index atau koneksi
                 if (snapshot.hasError) {
-                  return Center(child: Text("Terjadi Kesalahan: ${snapshot.error}"));
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Text(
+                        "Pastikan Index Firestore sudah dibuat atau cek koneksi.\nError: ${snapshot.error}",
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  );
                 }
 
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -95,7 +119,7 @@ class _RekapPageState extends State<RekapPage> {
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(15),
                         boxShadow: [
-                          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))
+                          BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))
                         ],
                       ),
                       child: ListTile(
@@ -116,6 +140,7 @@ class _RekapPageState extends State<RekapPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const SizedBox(height: 4),
+                            // Gunakan helper formatDate yang aman
                             Text(_formatDate(data['date']), style: const TextStyle(fontSize: 11, color: Colors.grey)),
                             Text(isMasuk ? 'Uang Masuk' : 'Uang Keluar', 
                               style: TextStyle(fontSize: 11, color: isMasuk ? Colors.green : Colors.red, fontWeight: FontWeight.bold)),
@@ -182,18 +207,28 @@ class _RekapPageState extends State<RekapPage> {
   void _confirmDelete(BuildContext context, String id) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         title: const Text("Hapus Transaksi?"),
         content: const Text("Data ini akan dihapus permanen dari riwayat grup."),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Batal")),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text("Batal")),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () async {
-              await FirebaseFirestore.instance.collection('transactions').doc(id).delete();
-              if (!context.mounted) return;
-              Navigator.pop(context);
+              try {
+                // Tutup dialog dulu
+                Navigator.pop(dialogContext);
+                
+                // Jalankan proses hapus
+                await FirebaseFirestore.instance.collection('transactions').doc(id).delete();
+                
+                if (!context.mounted) return;
+                ErrorService.showSuccess(context, "Transaksi berhasil dihapus");
+              } catch (e) {
+                if (!context.mounted) return;
+                ErrorService.show(context, e);
+              }
             },
             child: const Text("Hapus"),
           ),

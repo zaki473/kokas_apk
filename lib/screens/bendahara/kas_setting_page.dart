@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '/services/error_service.dart'; 
 
 class KasSettingPage extends StatefulWidget {
   const KasSettingPage({super.key});
@@ -14,18 +15,18 @@ class KasSettingPage extends StatefulWidget {
 
 class _KasSettingPageState extends State<KasSettingPage> {
   final _formKey = GlobalKey<FormState>();
-  final String myUid = FirebaseAuth.instance.currentUser?.uid ?? "";
+  final String _myUid = FirebaseAuth.instance.currentUser?.uid ?? "";
 
-  String? myGroupId;
-  bool isLoading = true;
-  bool isSaving = false;
+  String? _myGroupId;
+  bool _isLoading = true;
+  bool _isSaving = false;
 
   final TextEditingController _bulanController = TextEditingController();
-  final TextEditingController _nominalController = TextEditingController(text: "10,000");
+  // Standarisasi default value dengan format titik
+  final TextEditingController _nominalController = TextEditingController(text: "10.000");
 
-  DateTime? selectedDateTime;
+  DateTime? _selectedDateTime;
 
-  // Warna Tema Navy
   final Color primaryNavy = const Color(0xFF1A237E);
   final Color backgroundColor = const Color(0xFFF4F6F8);
 
@@ -37,15 +38,17 @@ class _KasSettingPageState extends State<KasSettingPage> {
 
   Future<void> _loadGroupId() async {
     try {
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(myUid).get();
-      if (userDoc.exists) {
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(_myUid).get();
+      if (userDoc.exists && mounted) {
         setState(() {
-          myGroupId = userDoc['groupId'];
-          isLoading = false;
+          _myGroupId = userDoc['groupId'];
+          _isLoading = false;
         });
       }
     } catch (e) {
-      setState(() => isLoading = false);
+      if (!context.mounted) return;
+      ErrorService.show(context, e);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -80,16 +83,18 @@ class _KasSettingPageState extends State<KasSettingPage> {
       );
 
       if (pickedTime != null) {
-        final finalDateTime = DateTime(
-          pickedDate.year, pickedDate.month, pickedDate.day,
-          pickedTime.hour, pickedTime.minute,
-        );
-        setState(() => selectedDateTime = finalDateTime);
+        setState(() {
+          _selectedDateTime = DateTime(
+            pickedDate.year, pickedDate.month, pickedDate.day,
+            pickedTime.hour, pickedTime.minute,
+          );
+        });
       }
     }
   }
 
   void _showSnackBar(String msg, Color color) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg), backgroundColor: color, behavior: SnackBarBehavior.floating),
     );
@@ -97,52 +102,64 @@ class _KasSettingPageState extends State<KasSettingPage> {
 
   Future<void> _saveSettings() async {
     if (!_formKey.currentState!.validate()) return;
-    if (selectedDateTime == null) {
+    if (_selectedDateTime == null) {
       _showSnackBar("Pilih deadline dulu!", Colors.redAccent);
       return;
     }
-    if (myGroupId == null) return;
+    if (_myGroupId == null) return;
 
-    setState(() => isSaving = true);
+    setState(() => _isSaving = true);
     try {
       final bulan = _bulanController.text.trim();
-      final nominal = int.parse(_nominalController.text.replaceAll(',', ''));
+      // Parsing aman dari format titik (.)
+      final nominalStr = _nominalController.text.replaceAll('.', '');
+      final nominal = int.tryParse(nominalStr) ?? 0;
+
+      if (nominal <= 0) {
+        _showSnackBar("Nominal tidak valid!", Colors.red);
+        setState(() => _isSaving = false);
+        return;
+      }
 
       final check = await FirebaseFirestore.instance
           .collection('kas_deadline')
           .where('bulan', isEqualTo: bulan)
-          .where('groupId', isEqualTo: myGroupId)
+          .where('groupId', isEqualTo: _myGroupId)
           .get();
 
       if (check.docs.isNotEmpty) {
-        _showSnackBar("Sudah ada tagihan bulan ini!", Colors.orange);
-        setState(() => isSaving = false);
+        if (!context.mounted) return;
+        ErrorService.show(context, "Sudah ada tagihan bulan ini!");
         return;
       }
 
       await FirebaseFirestore.instance.collection('kas_deadline').add({
         'bulan': bulan,
         'nominal': nominal,
-        'tanggal_deadline': Timestamp.fromDate(selectedDateTime!),
+        'tanggal_deadline': Timestamp.fromDate(_selectedDateTime!),
         'created_at': FieldValue.serverTimestamp(),
-        'groupId': myGroupId,
+        'groupId': _myGroupId,
       });
 
-      setState(() {
-        selectedDateTime = null;
-        _bulanController.clear();
-        isSaving = false;
-      });
-      _showSnackBar("Tagihan kas berhasil dikirim!", primaryNavy);
+      if (mounted) {
+        setState(() {
+          _selectedDateTime = null;
+          _bulanController.clear();
+          _isSaving = false;
+        });
+       ErrorService.showSuccess(context, "Tagihan kas berhasil dikirim!");
+      }
     } catch (e) {
-      setState(() => isSaving = false);
-      _showSnackBar("Error: $e", Colors.red);
+      if (mounted) {
+        setState(() => _isSaving = false);
+        ErrorService.show(context, e);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
+    if (_isLoading) {
       return Scaffold(body: Center(child: CircularProgressIndicator(color: primaryNavy)));
     }
 
@@ -157,7 +174,6 @@ class _KasSettingPageState extends State<KasSettingPage> {
       ),
       body: Stack(
         children: [
-          // Curved Header Background
           Container(
             height: 60,
             decoration: BoxDecoration(
@@ -165,17 +181,13 @@ class _KasSettingPageState extends State<KasSettingPage> {
               borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
             ),
           ),
-
           SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 25),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 10),
-                
-                // Form Input Tagihan
                 _buildFormCard(),
-
                 const SizedBox(height: 30),
                 const Text("Daftar Tagihan Aktif", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
                 const SizedBox(height: 15),
@@ -195,7 +207,7 @@ class _KasSettingPageState extends State<KasSettingPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(25),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 15, offset: const Offset(0, 5))],
       ),
       child: Form(
         key: _formKey,
@@ -215,40 +227,32 @@ class _KasSettingPageState extends State<KasSettingPage> {
               isNumber: true,
             ),
             const SizedBox(height: 15),
-            
-            // Deadline Picker
             GestureDetector(
               onTap: () => _selectDateTime(context),
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 15),
-                decoration: BoxDecoration(
-                  color: backgroundColor,
-                  borderRadius: BorderRadius.circular(15),
-                ),
+                decoration: BoxDecoration(color: backgroundColor, borderRadius: BorderRadius.circular(15)),
                 child: Row(
                   children: [
                     Icon(Icons.event_available_rounded, color: primaryNavy),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        selectedDateTime == null
+                        _selectedDateTime == null
                             ? "Atur Batas Waktu (Deadline)"
-                            : DateFormat('dd MMM yyyy, HH:mm').format(selectedDateTime!),
-                        style: TextStyle(color: selectedDateTime == null ? Colors.grey[600] : Colors.black87, fontSize: 14),
+                            : DateFormat('dd MMM yyyy, HH:mm').format(_selectedDateTime!),
+                        style: TextStyle(color: _selectedDateTime == null ? Colors.grey[600] : Colors.black87, fontSize: 14),
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-
             const SizedBox(height: 25),
-
-            // Submit Button
             SizedBox(
               width: double.infinity,
               height: 55,
-              child: isSaving 
+              child: _isSaving 
                 ? Center(child: CircularProgressIndicator(color: primaryNavy))
                 : ElevatedButton(
                     style: ElevatedButton.styleFrom(
@@ -276,7 +280,8 @@ class _KasSettingPageState extends State<KasSettingPage> {
     return TextFormField(
       controller: controller,
       keyboardType: isNumber ? TextInputType.number : TextInputType.text,
-      inputFormatters: isNumber ? [FilteringTextInputFormatter.digitsOnly, ThousandsFormatter()] : [],
+      // Menggunakan formatter titik (.) sesuai locale Indonesia
+      inputFormatters: isNumber ? [FilteringTextInputFormatter.digitsOnly, ThousandsSeparatorFormatter()] : [],
       validator: (v) => v!.isEmpty ? "Wajib diisi" : null,
       decoration: InputDecoration(
         labelText: label,
@@ -292,12 +297,16 @@ class _KasSettingPageState extends State<KasSettingPage> {
 
   Widget _buildList() {
     return StreamBuilder<QuerySnapshot>(
+      // Ditambahkan OrderBy agar bendahara tidak bingung mencari data terbaru
       stream: FirebaseFirestore.instance
           .collection('kas_deadline')
-          .where('groupId', isEqualTo: myGroupId)
+          .where('groupId', isEqualTo: _myGroupId)
+          .orderBy('created_at', descending: true)
           .snapshots(),
       builder: (context, snap) {
-        if (!snap.hasData) return const SizedBox();
+        if (snap.hasError) return Text("Error: ${snap.error}");
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        
         final docs = snap.data!.docs;
         if (docs.isEmpty) return const Center(child: Text("Belum ada tagihan aktif."));
 
@@ -307,21 +316,23 @@ class _KasSettingPageState extends State<KasSettingPage> {
           itemCount: docs.length,
           itemBuilder: (c, i) {
             final d = docs[i];
-            final dl = (d['tanggal_deadline'] as Timestamp).toDate();
+            // Safety check untuk data yang baru dikirim (server timestamp belum turun)
+            final dlTimestamp = d['tanggal_deadline'] as Timestamp?;
+            final dl = dlTimestamp?.toDate() ?? DateTime.now();
 
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(15),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 5)],
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 5)],
               ),
               child: ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: primaryNavy.withOpacity(0.1),
+                  backgroundColor: primaryNavy.withValues(alpha: 0.1),
                   child: Icon(Icons.receipt_long_rounded, color: primaryNavy, size: 20),
                 ),
-                title: Text(d['bulan'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                title: Text(d['bulan'] ?? "-", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                 subtitle: Text("Batas: ${DateFormat('dd MMM yyyy').format(dl)}", style: const TextStyle(fontSize: 12)),
                 trailing: IconButton(
                   icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
@@ -351,15 +362,17 @@ class _KasSettingPageState extends State<KasSettingPage> {
   }
 }
 
-class ThousandsFormatter extends TextInputFormatter {
+// FORMATTER TITIK INDONESIA (.)
+class ThousandsSeparatorFormatter extends TextInputFormatter {
   @override
-  TextEditingValue formatEditUpdate(oldValue, newValue) {
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
     if (newValue.text.isEmpty) return newValue;
-    final value = int.parse(newValue.text.replaceAll(',', ''));
-    final newText = NumberFormat('#,###').format(value);
+    int value = int.parse(newValue.text.replaceAll('.', ''));
+    final formatter = NumberFormat.decimalPattern('id'); // Menggunakan locale Indonesia
+    final newString = formatter.format(value);
     return TextEditingValue(
-      text: newText,
-      selection: TextSelection.collapsed(offset: newText.length),
+      text: newString,
+      selection: TextSelection.collapsed(offset: newString.length),
     );
   }
 }

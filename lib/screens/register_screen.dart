@@ -20,6 +20,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _isContentVisible = false;
 
   @override
+  void dispose() {
+    _namaController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
   void initState() {
     super.initState();
     Future.delayed(const Duration(milliseconds: 100), () {
@@ -28,11 +36,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _handleRegister() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
+  if (_isLoading) return; 
 
-      // Gunakan fungsi register yang menset role 'none'
-      String? error = await AuthService().registerUser(
+  FocusScope.of(context).unfocus(); 
+
+  if (_formKey.currentState!.validate()) {
+    setState(() => _isLoading = true);
+
+    try {
+      await AuthService().registerUser(
         _emailController.text.trim(),
         _passwordController.text.trim(),
         _namaController.text.trim(),
@@ -40,25 +52,32 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       if (!mounted) return;
       setState(() => _isLoading = false);
+      
+      // TAMPILKAN SNACKBAR BERHASIL
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Registrasi Berhasil! Silakan Login."),
+          backgroundColor: Colors.green,
+        ),
+      );
 
-      if (error == null) {
-        // Setelah daftar, arahkan ke SetupGroupScreen (setelah otomatis login)
-        // Atau arahkan balik ke login dengan pesan sukses
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Berhasil! Silahkan Login.")),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error),
-            backgroundColor: Colors.redAccent,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      // LANGSUNG KEMBALI KE HALAMAN LOGIN
+      Navigator.pop(context);
+
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+
+      // TAMPILKAN PESAN ERROR SIMPLE
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Gagal: ${e.toString()}"),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -98,7 +117,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
+                      color: Colors.white.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -164,11 +183,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                       ),
                       filled: true,
-                      fillColor: Colors.white.withOpacity(0.1),
+                      fillColor: Colors.white.withValues(alpha: 0.1),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(15),
                         borderSide: BorderSide(
-                          color: Colors.white.withOpacity(0.1),
+                          color: Colors.white.withValues(alpha: 0.1),
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
@@ -265,10 +284,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
         labelStyle: const TextStyle(color: Colors.white70),
         prefixIcon: Icon(icon, color: Colors.white70),
         filled: true,
-        fillColor: Colors.white.withOpacity(0.1),
+        fillColor: Colors.white.withValues(alpha: 0.1),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),

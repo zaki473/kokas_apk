@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Tambahkan ini
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import '/services/error_service.dart';
 
 class CashFlowPage extends StatefulWidget {
   const CashFlowPage({super.key});
@@ -23,21 +24,26 @@ class _CashFlowPageState extends State<CashFlowPage> {
     _loadUserGroupId();
   }
 
-  // 1. Ambil GroupID milik user agar data tidak kecampur dengan grup lain
   Future<void> _loadUserGroupId() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
 
-      if (userDoc.exists) {
-        setState(() {
-          _userGroupId = userDoc['groupId'];
-          _isLoadingUser = false;
-        });
+        if (userDoc.exists && mounted) {
+          setState(() {
+            _userGroupId = userDoc['groupId'];
+            _isLoadingUser = false;
+          });
+        }
       }
+    } catch (e) {
+      if (!context.mounted) return;
+      ErrorService.show(context, e);
+      if (mounted) setState(() => _isLoadingUser = false);
     }
   }
 
@@ -45,8 +51,12 @@ class _CashFlowPageState extends State<CashFlowPage> {
     return NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0).format(value);
   }
 
-  String _formatDate(Timestamp ts) {
-    return DateFormat('dd MMM yyyy').format(ts.toDate());
+  String _formatDate(dynamic ts) {
+    if (ts == null) return "-"; // Safety check jika tanggal kosong
+    if (ts is Timestamp) {
+      return DateFormat('dd MMM yyyy').format(ts.toDate());
+    }
+    return "-";
   }
 
   @override
@@ -64,7 +74,6 @@ class _CashFlowPageState extends State<CashFlowPage> {
       ? Center(child: CircularProgressIndicator(color: primaryNavy))
       : Stack(
           children: [
-            // Background Header Melengkung
             Container(
               height: 80,
               decoration: BoxDecoration(
@@ -77,15 +86,17 @@ class _CashFlowPageState extends State<CashFlowPage> {
             ),
             
             StreamBuilder<QuerySnapshot>(
-              // 2. Filter berdasarkan groupId dan urutkan berdasarkan tanggal
+              // Optimasi: Tambahkan .limit untuk mencegah aplikasi lemot jika data ribuan
               stream: FirebaseFirestore.instance
                   .collection('transactions')
-                  .where('groupId', isEqualTo: _userGroupId) // 🔥 FILTER DI SINI
+                  .where('groupId', isEqualTo: _userGroupId)
                   .orderBy('date', descending: true)
+                  .limit(100) // Ambil 100 transaksi terakhir saja untuk performa
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
-                  return Center(child: Text("Terjadi kesalahan: ${snapshot.error}", style: const TextStyle(color: Colors.red)));
+                  // Jika muncul error index, cek konsol dan klik link yang diberikan Firebase
+                  return _buildErrorState(snapshot.error.toString());
                 }
 
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -97,6 +108,8 @@ class _CashFlowPageState extends State<CashFlowPage> {
                 }
                 
                 return ListView.builder(
+                  // physics agar scroll terasa premium
+                  physics: const BouncingScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
                   itemCount: snapshot.data!.docs.length,
                   itemBuilder: (context, index) {
@@ -122,7 +135,7 @@ class _CashFlowPageState extends State<CashFlowPage> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           )
@@ -143,26 +156,23 @@ class _CashFlowPageState extends State<CashFlowPage> {
           ),
         ),
         title: Text(
-          data['keterangan'] ?? "-",
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF2D3142)),
+          data['keterangan'] ?? "Tanpa Keterangan",
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF2D3142)),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Text(
-              _formatDate(data['date'] as Timestamp),
-              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-            ),
-          ],
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            _formatDate(data['date']),
+            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+          ),
         ),
         trailing: Text(
           "${isMasuk ? '+' : '-'} ${_formatCurrency((data['jumlah'] ?? 0).toDouble())}",
           style: TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 14,
+            fontWeight: FontWeight.w900,
+            fontSize: 13,
             color: isMasuk ? Colors.green[700] : Colors.red[700],
           ),
         ),
@@ -178,11 +188,32 @@ class _CashFlowPageState extends State<CashFlowPage> {
           Icon(Icons.receipt_long_rounded, size: 80, color: Colors.grey[300]),
           const SizedBox(height: 15),
           const Text(
-            "Belum ada riwayat transaksi\ndi grup Anda.",
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey, fontSize: 16),
+            "Belum ada riwayat transaksi",
+            style: TextStyle(color: Colors.grey, fontSize: 16, fontWeight: FontWeight.w500),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(String error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(30),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline_rounded, color: Colors.red, size: 50),
+            const SizedBox(height: 10),
+            const Text("Oops! Terjadi kesalahan.", style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 5),
+            Text(
+              error.contains("index") ? "Database memerlukan sinkronisasi indeks. Silakan hubungi pengembang." : error,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
       ),
     );
   }

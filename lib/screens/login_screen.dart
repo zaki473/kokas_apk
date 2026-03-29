@@ -6,6 +6,7 @@ import 'register_screen.dart';
 import 'bendahara_screen.dart';
 import 'anggota_screen.dart';
 import 'package:kokas/screens/setup_group_page.dart';
+import '/services/error_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -26,16 +27,20 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(milliseconds: 200), () {
-      if (mounted) {
-        setState(() {
-          _isContentVisible = true;
-        });
-      }
+    // Animasi muncul lebih rapi
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) setState(() => _isContentVisible = true);
     });
   }
 
-  // FUNGSI: Pop-up Konfirmasi Keluar (Tema Navy)
+  @override
+  void dispose() {
+    // WAJIB: Mencegah Memory Leak agar HP tidak panas/lemot
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
   void _showExitDialog() {
     showDialog(
       context: context,
@@ -67,23 +72,27 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _handleLogin() async {
+    if (_isLoading) return; // 🔥 anti double click
+
+    FocusScope.of(context).unfocus();
+
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
+
       try {
         final userData = await AuthService().loginUser(
           _emailController.text.trim(),
           _passwordController.text.trim(),
         );
 
-        if (userData != null) {
-          String role = userData['role'];
-          String groupId = userData['groupId'] ?? ''; // Ambil groupId
+        if (!mounted) return;
 
-          if (!mounted) return;
+        if (userData != null) {
+          String role = (userData['role'] ?? 'none').toString();
+          String groupId = (userData['groupId'] ?? '').toString();
 
           Widget destination;
-          if (role == 'none' || groupId == '') {
-            // JIKA BELUM SET-UP GRUP
+          if (role == 'none' || groupId.isEmpty) {
             destination = const SetupGroupPage();
           } else if (role == 'bendahara') {
             destination = const BendaharaScreen();
@@ -96,16 +105,14 @@ class _LoginScreenState extends State<LoginScreen> {
             MaterialPageRoute(builder: (context) => destination),
             (route) => false,
           );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Data user tidak ditemukan")),
+          );
         }
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Login Gagal: Email atau Password salah"),
-            backgroundColor: Colors.redAccent,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        ErrorService.show(context, e);
       } finally {
         if (mounted) setState(() => _isLoading = false);
       }
@@ -114,156 +121,167 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF1A237E), // BACKGROUND FULL NAVY
-      body: AnimatedOpacity(
-        duration: const Duration(milliseconds: 800),
-        opacity: _isContentVisible ? 1.0 : 0.0,
-        child: Container(
-          height: double.infinity,
-          width: double.infinity,
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Color(0xFF1A237E),
-                Color(0xFF0D1242),
-              ], // Gradasi Navy Gelap
-            ),
-          ),
-          child: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 30),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const SizedBox(height: 60),
-                    // Logo/Icon Putih
-                    const Icon(
-                      Icons.account_balance_wallet_rounded,
-                      size: 80,
-                      color: Colors.white,
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      "KOKAS LOGIN",
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                    const Text(
-                      "Kelola kas organisasi dengan aman",
-                      style: TextStyle(color: Colors.white70, fontSize: 14),
-                    ),
-                    const SizedBox(height: 50),
-
-                    // INPUT EMAIL (MODERN WHITE STYLE)
-                    _buildTextField(
-                      controller: _emailController,
-                      label: "Alamat Email",
-                      icon: Icons.email_outlined,
-                      validator: AppValidators.validateEmail,
-                    ),
-                    const SizedBox(height: 20),
-
-                    // INPUT PASSWORD
-                    _buildTextField(
-                      controller: _passwordController,
-                      label: "Password",
-                      icon: Icons.lock_outline,
-                      isPassword: true,
-                      obscureText: _obscurePassword,
-                      toggleObscure: () =>
-                          setState(() => _obscurePassword = !_obscurePassword),
-                      validator: AppValidators.validatePassword,
-                    ),
-                    const SizedBox(height: 40),
-
-                    // TOMBOL MASUK (KONTRASTERANG - PUTIH)
-                    SizedBox(
-                      width: double.infinity,
-                      height: 55,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: const Color(0xFF1A237E),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
+    // GestureDetector agar jika user klik di luar input, keyboard langsung menutup
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: PopScope(
+        canPop: false, // Mencegah back button langsung keluar
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) return;
+          _showExitDialog(); // Tampilkan dialog konfirmasi jika tekan back
+        },
+        child: Scaffold(
+          backgroundColor: const Color(0xFF1A237E),
+          body: AnimatedOpacity(
+            duration: const Duration(milliseconds: 800),
+            opacity: _isContentVisible ? 1.0 : 0.0,
+            child: Container(
+              height: double.infinity,
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF1A237E), Color(0xFF0D1242)],
+                ),
+              ),
+              child: SafeArea(
+                child: Center(
+                  // Agar konten tetap di tengah jika layar besar
+                  child: SingleChildScrollView(
+                    physics:
+                        const BouncingScrollPhysics(), // Scroll lebih smooth di iOS/Android
+                    padding: const EdgeInsets.symmetric(horizontal: 30),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 40),
+                          const Icon(
+                            Icons.account_balance_wallet_rounded,
+                            size: 80,
+                            color: Colors.white,
                           ),
-                          elevation: 0,
-                        ),
-                        onPressed: _isLoading ? null : _handleLogin,
-                        child: _isLoading
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  color: Color(0xFF1A237E),
-                                  strokeWidth: 3,
+                          const SizedBox(height: 20),
+                          const Text(
+                            "KOKAS LOGIN",
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                          const Text(
+                            "Kelola kas organisasi dengan aman",
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 50),
+
+                          _buildTextField(
+                            controller: _emailController,
+                            label: "Alamat Email",
+                            icon: Icons.email_outlined,
+                            validator: AppValidators.validateEmail,
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                          ),
+                          const SizedBox(height: 20),
+
+                          _buildTextField(
+                            controller: _passwordController,
+                            label: "Password",
+                            icon: Icons.lock_outline,
+                            isPassword: true,
+                            obscureText: _obscurePassword,
+                            toggleObscure: () => setState(
+                              () => _obscurePassword = !_obscurePassword,
+                            ),
+                            validator: AppValidators.validatePassword,
+                            textInputAction: TextInputAction.done,
+                            onFieldSubmitted: (_) => _handleLogin(),
+                          ),
+                          const SizedBox(height: 40),
+
+                          SizedBox(
+                            width: double.infinity,
+                            height: 55,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                foregroundColor: const Color(0xFF1A237E),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(15),
                                 ),
-                              )
-                            : const Text(
-                                "MASUK SEKARANG",
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1,
-                                ),
+                                elevation:
+                                    5, // Sedikit shadow agar lebih timbul
                               ),
-                      ),
-                    ),
+                              onPressed: _isLoading ? null : _handleLogin,
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 3,
+                                      ),
+                                    )
+                                  : const Text(
+                                      "MASUK SEKARANG",
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(height: 25),
 
-                    const SizedBox(height: 25),
-
-                    // DAFTAR AKUN
-                    TextButton(
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const RegisterScreen(),
-                        ),
-                      ),
-                      child: RichText(
-                        text: const TextSpan(
-                          text: "Belum punya akun? ",
-                          style: TextStyle(color: Colors.white70),
-                          children: [
-                            TextSpan(
-                              text: "Daftar Disini",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                decoration: TextDecoration.underline,
+                          TextButton(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const RegisterScreen(),
                               ),
                             ),
-                          ],
-                        ),
+                            child: RichText(
+                              text: const TextSpan(
+                                text: "Belum punya akun? ",
+                                style: TextStyle(color: Colors.white70),
+                                children: [
+                                  TextSpan(
+                                    text: "Daftar Disini",
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 40),
+
+                          TextButton.icon(
+                            onPressed: _showExitDialog,
+                            icon: const Icon(
+                              Icons.power_settings_new_rounded,
+                              color: Colors.white54,
+                              size: 20,
+                            ),
+                            label: const Text(
+                              "Keluar Aplikasi",
+                              style: TextStyle(color: Colors.white54),
+                            ),
+                          ),
+                          const SizedBox(height: 30),
+                        ],
                       ),
                     ),
-
-                    const SizedBox(height: 40),
-
-                    // TOMBOL KELUAR
-                    TextButton.icon(
-                      onPressed: _showExitDialog,
-                      icon: const Icon(
-                        Icons.power_settings_new_rounded,
-                        color: Colors.white54,
-                        size: 20,
-                      ),
-                      label: const Text(
-                        "Keluar Aplikasi",
-                        style: TextStyle(color: Colors.white54, fontSize: 14),
-                      ),
-                    ),
-                    const SizedBox(height: 30),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -273,7 +291,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // WIDGET HELPER UNTUK TEXTFIELD NAVY STYLE
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
@@ -282,11 +299,17 @@ class _LoginScreenState extends State<LoginScreen> {
     bool obscureText = false,
     VoidCallback? toggleObscure,
     String? Function(String?)? validator,
+    TextInputType? keyboardType,
+    TextInputAction? textInputAction,
+    Function(String)? onFieldSubmitted,
   }) {
     return TextFormField(
       controller: controller,
       obscureText: obscureText,
       validator: validator,
+      keyboardType: keyboardType,
+      textInputAction: textInputAction,
+      onFieldSubmitted: onFieldSubmitted,
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         labelText: label,
@@ -302,10 +325,10 @@ class _LoginScreenState extends State<LoginScreen> {
               )
             : null,
         filled: true,
-        fillColor: Colors.white.withOpacity(0.1),
+        fillColor: Colors.white.withValues(alpha: 0.1),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),

@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:typed_data'; // Tambahan untuk efisiensi memory
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import '/services/error_service.dart'; // Pastikan path ini benar
 
 class VerifikasiBayarPage extends StatefulWidget {
   const VerifikasiBayarPage({super.key});
@@ -14,6 +16,8 @@ class VerifikasiBayarPage extends StatefulWidget {
 class _VerifikasiBayarPageState extends State<VerifikasiBayarPage> {
   String? _bendaharaGroupId;
   bool _isLoading = true;
+  // Cache untuk menyimpan bytes gambar agar tidak decode berulang-ulang
+  final Map<String, Uint8List> _imageCache = {};
 
   @override
   void initState() {
@@ -30,15 +34,17 @@ class _VerifikasiBayarPageState extends State<VerifikasiBayarPage> {
             .doc(user.uid)
             .get();
 
-        if (userDoc.exists) {
+        if (userDoc.exists && mounted) {
           setState(() {
-            _bendaharaGroupId = userDoc.get('groupId'); 
+            _bendaharaGroupId = userDoc.get('groupId');
             _isLoading = false;
           });
         }
       }
     } catch (e) {
-      setState(() => _isLoading = false);
+      if (!context.mounted) return;
+      ErrorService.show(context, e);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -46,16 +52,25 @@ class _VerifikasiBayarPageState extends State<VerifikasiBayarPage> {
     return NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0).format(value);
   }
 
+  // Helper untuk loading dialog agar tidak duplikasi code
+  void _showLoadingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+  }
+
   Future<void> _prosesTerima(BuildContext context, String docId, Map<String, dynamic> data) async {
-    showDialog(context: context, barrierDismissible: false, builder: (context) => const Center(child: CircularProgressIndicator()));
+    _showLoadingDialog();
 
     try {
       final firestore = FirebaseFirestore.instance;
-      String gId = data['groupId'] ?? ""; 
+      String gId = data['groupId'] ?? "";
 
       if (gId.isEmpty) {
         Navigator.pop(context);
-        _showSnackBar("Gagal: Data pembayaran tidak memiliki groupId!", Colors.red);
+        _showSnackBar("Gagal: Data tidak valid!", Colors.red);
         return;
       }
 
@@ -67,34 +82,45 @@ class _VerifikasiBayarPageState extends State<VerifikasiBayarPage> {
         DocumentReference transRef = firestore.collection('transactions').doc();
         transaction.set(transRef, {
           'date': FieldValue.serverTimestamp(),
-          'groupId': gId, 
+          'groupId': gId,
           'jumlah': nominal,
           'keterangan': 'Iuran: ${data['nama_pengirim']} (${data['bulan']})',
           'type': 'masuk',
         });
       });
 
-      if (!mounted) return;
+      if (!context.mounted) return;
       Navigator.pop(context);
-      _showSnackBar("Pembayaran berhasil diverifikasi!", Colors.green);
+      ErrorService.showSuccess(context, "Pembayaran berhasil diverifikasi!");
     } catch (e) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       Navigator.pop(context);
-      _showSnackBar("Error: $e", Colors.red);
+      ErrorService.show(context, e);
     }
   }
 
   Future<void> _prosesTolak(String docId) async {
-    await FirebaseFirestore.instance.collection('pembayaran').doc(docId).update({'status': 'ditolak'});
-    _showSnackBar("Pembayaran ditolak.", Colors.redAccent);
+    _showLoadingDialog(); // Tambahkan loading agar user tidak klik berkali-kali
+    try {
+      await FirebaseFirestore.instance.collection('pembayaran').doc(docId).update({'status': 'ditolak'});
+      if (!mounted) return;
+      Navigator.pop(context);
+      _showSnackBar("Pembayaran ditolak.", Colors.redAccent);
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      _showSnackBar("Gagal menolak data", Colors.red);
+    }
   }
 
   void _showSnackBar(String msg, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color, behavior: SnackBarBehavior.floating));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: color, behavior: SnackBarBehavior.floating),
+    );
   }
 
-  // 🔥 FUNGSI BARU UNTUK ZOOM GAMBAR
-  void _showZoomImage(BuildContext context, String base64Photo) {
+  void _showZoomImage(BuildContext context, Uint8List imageBytes) {
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -103,20 +129,15 @@ class _VerifikasiBayarPageState extends State<VerifikasiBayarPage> {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            // InteractiveViewer memungkinkan cubit-zoom (pinch style)
             InteractiveViewer(
               panEnabled: true,
               minScale: 0.5,
               maxScale: 4.0,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(15),
-                child: Image.memory(
-                  base64Decode(base64Photo),
-                  fit: BoxFit.contain,
-                ),
+                child: Image.memory(imageBytes, fit: BoxFit.contain),
               ),
             ),
-            // Tombol Close
             Positioned(
               top: 10,
               right: 10,
@@ -145,43 +166,72 @@ class _VerifikasiBayarPageState extends State<VerifikasiBayarPage> {
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: _isLoading 
-      ? const Center(child: CircularProgressIndicator())
-      : Stack(
-          children: [
-            Container(height: 80, decoration: const BoxDecoration(color: Color(0xFF1A237E), borderRadius: BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)))),
-            StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('pembayaran')
-                  .where('status', isEqualTo: 'pending')
-                  .where('groupId', isEqualTo: _bendaharaGroupId)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                if (snapshot.data!.docs.isEmpty) return const Center(child: Text("Tidak ada pembayaran pending"));
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Stack(
+              children: [
+                Container(
+                  height: 80,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF1A237E),
+                    borderRadius: BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
+                  ),
+                ),
+                if (_bendaharaGroupId == null)
+                  const Center(child: Text("Gagal mengambil data grup"))
+                else
+                  StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('pembayaran')
+                        .where('status', isEqualTo: 'pending')
+                        .where('groupId', isEqualTo: _bendaharaGroupId)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                        return const Center(child: Text("Tidak ada pembayaran pending"));
+                      }
 
-                return ListView.builder(
-                  padding: const EdgeInsets.all(20),
-                  itemCount: snapshot.data!.docs.length,
-                  itemBuilder: (context, index) {
-                    var doc = snapshot.data!.docs[index];
-                    var data = doc.data() as Map<String, dynamic>;
-                    return _buildVerifCard(doc.id, data);
-                  },
-                );
-              },
+                      return ListView.builder(
+                        padding: const EdgeInsets.all(20),
+                        itemCount: snapshot.data!.docs.length,
+                        itemBuilder: (context, index) {
+                          var doc = snapshot.data!.docs[index];
+                          var data = doc.data() as Map<String, dynamic>;
+                          return _buildVerifCard(doc.id, data);
+                        },
+                      );
+                    },
+                  ),
+              ],
             ),
-          ],
-        ),
     );
   }
 
   Widget _buildVerifCard(String id, Map<String, dynamic> data) {
-    String photo = data['url_bukti'] ?? "";
+    String photoBase64 = data['url_bukti'] ?? "";
+    
+    // Logic Caching Image: Supaya tidak decode Base64 berulang-ulang saat scroll
+    Uint8List? imageBytes;
+    if (photoBase64.isNotEmpty) {
+      if (_imageCache.containsKey(photoBase64)) {
+        imageBytes = _imageCache[photoBase64];
+      } else {
+        imageBytes = base64Decode(photoBase64);
+        _imageCache[photoBase64] = imageBytes;
+      }
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)]),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
+      ),
       child: Column(
         children: [
           ListTile(
@@ -189,28 +239,34 @@ class _VerifikasiBayarPageState extends State<VerifikasiBayarPage> {
             leading: const CircleAvatar(backgroundColor: Color(0xFF1A237E), child: Icon(Icons.person, color: Colors.white)),
             title: Text(data['nama_pengirim'] ?? "User", style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Text("Iuran Bulan: ${data['bulan']}"),
-            trailing: Text(formatCurrency((data['jumlah'] ?? 0).toDouble()), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 16)),
+            trailing: Text(
+              formatCurrency((data['jumlah'] ?? 0).toDouble()),
+              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 16),
+            ),
           ),
           const SizedBox(height: 10),
-          
-          if (photo.isNotEmpty) 
+          if (imageBytes != null)
             GestureDetector(
-              onTap: () => _showZoomImage(context, photo), // Tap untuk memperbesar
+              onTap: () => _showZoomImage(context, imageBytes!),
               child: Stack(
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(10),
-                    child: Image.memory(base64Decode(photo), height: 150, width: double.infinity, fit: BoxFit.cover),
+                    child: Image.memory(
+                      imageBytes,
+                      height: 150,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      // Tambahkan cacheHeight untuk mengurangi beban memori
+                      cacheHeight: 400, 
+                    ),
                   ),
                   Positioned(
                     bottom: 8,
                     right: 8,
                     child: Container(
                       padding: const EdgeInsets.all(5),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                      decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(8)),
                       child: const Icon(Icons.zoom_in, color: Colors.white, size: 20),
                     ),
                   ),
@@ -220,9 +276,21 @@ class _VerifikasiBayarPageState extends State<VerifikasiBayarPage> {
           const SizedBox(height: 15),
           Row(
             children: [
-              Expanded(child: OutlinedButton(onPressed: () => _prosesTolak(id), style: OutlinedButton.styleFrom(foregroundColor: Colors.red), child: const Text("TOLAK"))),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => _prosesTolak(id),
+                  style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                  child: const Text("TOLAK"),
+                ),
+              ),
               const SizedBox(width: 10),
-              Expanded(child: ElevatedButton(onPressed: () => _prosesTerima(context, id, data), style: ElevatedButton.styleFrom(backgroundColor: Colors.green), child: const Text("TERIMA", style: TextStyle(color: Colors.white)))),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => _prosesTerima(context, id, data),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                  child: const Text("TERIMA", style: TextStyle(color: Colors.white)),
+                ),
+              ),
             ],
           )
         ],

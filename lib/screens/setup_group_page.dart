@@ -18,6 +18,17 @@ class _SetupGroupPageState extends State<SetupGroupPage> {
   final _joinCodeController = TextEditingController();
   final String myUid = FirebaseAuth.instance.currentUser!.uid;
 
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    _groupNameController.dispose();
+    _joinCodeController.dispose();
+    super.dispose();
+  }
   // --- LOGIKA UTAMA (TETAP SAMA) ---
 
   void _createGroup() async {
@@ -71,6 +82,7 @@ class _SetupGroupPageState extends State<SetupGroupPage> {
         Navigator.pop(context); // Tutup loading
         _goToDashboard('anggota');
       } else {
+        if (!mounted) return;
         Navigator.pop(context);
         _showError("Kode Grup tidak valid!");
       }
@@ -104,7 +116,7 @@ class _SetupGroupPageState extends State<SetupGroupPage> {
                 GestureDetector(
                   onTap: () async {
                     await AuthService().signOut();
-                    if (!mounted) return;
+                    if (!context.mounted) return;
                     Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
                   },
                   child: Row(
@@ -188,7 +200,7 @@ class _SetupGroupPageState extends State<SetupGroupPage> {
             children: [
               Container(
                 padding: const EdgeInsets.all(15),
-                decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+                decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
                 child: Icon(icon, color: color, size: 30),
               ),
               const SizedBox(width: 20),
