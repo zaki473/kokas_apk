@@ -103,10 +103,13 @@ class _KasSettingPageState extends State<KasSettingPage> {
   Future<void> _saveSettings() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedDateTime == null) {
-      _showSnackBar("Pilih deadline dulu!", Colors.redAccent);
+      _showSnackBar("Pilih deadline terlebih dahulu!", Colors.redAccent);
       return;
     }
-    if (_myGroupId == null) return;
+    if (_myGroupId == null || _myGroupId!.isEmpty) {
+      _showSnackBar("Anda tidak tergabung dalam grup kas aktif.", Colors.redAccent);
+      return;
+    }
 
     setState(() => _isSaving = true);
     try {
@@ -116,7 +119,7 @@ class _KasSettingPageState extends State<KasSettingPage> {
       final nominal = int.tryParse(nominalStr) ?? 0;
 
       if (nominal <= 0) {
-        _showSnackBar("Nominal tidak valid!", Colors.red);
+        _showSnackBar("Nominal kas tidak valid!", Colors.red);
         setState(() => _isSaving = false);
         return;
       }
@@ -129,7 +132,8 @@ class _KasSettingPageState extends State<KasSettingPage> {
 
       if (check.docs.isNotEmpty) {
         if (!context.mounted) return;
-        ErrorService.show(context, "Sudah ada tagihan bulan ini!");
+        ErrorService.show(context, "Sudah ada tagihan aktif untuk bulan ini!");
+        setState(() => _isSaving = false);
         return;
       }
 
@@ -145,9 +149,11 @@ class _KasSettingPageState extends State<KasSettingPage> {
         setState(() {
           _selectedDateTime = null;
           _bulanController.clear();
+          // Kita biarkan inputan nominal sesuai nilai terakhir agar Bendahara 
+          // tidak perlu mengetik ulang nominal kas setiap bulan jika jumlahnya sama.
           _isSaving = false;
         });
-       ErrorService.showSuccess(context, "Tagihan kas berhasil dikirim!");
+        ErrorService.showSuccess(context, "Tagihan kas berhasil dikirim ke anggota!");
       }
     } catch (e) {
       if (mounted) {
@@ -159,60 +165,67 @@ class _KasSettingPageState extends State<KasSettingPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return Scaffold(body: Center(child: CircularProgressIndicator(color: primaryNavy)));
-    }
-
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
         elevation: 0,
         backgroundColor: primaryNavy,
-        title: const Text("Pengaturan Kas", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        title: const Text("Pengaturan Kas", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18)),
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: Stack(
-        children: [
-          Container(
-            height: 60,
-            decoration: BoxDecoration(
-              color: primaryNavy,
-              borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
-            ),
-          ),
-          SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 25),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 10),
-                _buildFormCard(),
-                const SizedBox(height: 30),
-                const Text("Daftar Tagihan Aktif", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
-                const SizedBox(height: 15),
-                _buildList(),
-                const SizedBox(height: 50),
-              ],
-            ),
-          ),
-        ],
-      ),
+      body: _isLoading
+          ? Center(child: CircularProgressIndicator(color: primaryNavy))
+          : _myGroupId == null || _myGroupId!.isEmpty
+              ? _buildNoGroupState()
+              : Stack(
+                  children:[
+                    Container(
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: primaryNavy,
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(30), 
+                          bottomRight: Radius.circular(30)
+                        ),
+                      ),
+                    ),
+                    SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(horizontal: 25),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children:[
+                          const SizedBox(height: 10),
+                          _buildFormCard(),
+                          const SizedBox(height: 35),
+                          const Text(
+                            "Daftar Tagihan Aktif", 
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2D3142))
+                          ),
+                          const SizedBox(height: 15),
+                          _buildList(),
+                          const SizedBox(height: 50),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
     );
   }
 
   Widget _buildFormCard() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(25),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 15, offset: const Offset(0, 5))],
+        boxShadow:[BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 15, offset: const Offset(0, 5))],
       ),
       child: Form(
         key: _formKey,
         child: Column(
-          children: [
+          children:[
             _buildStyledTextField(
               controller: _bulanController,
               label: "Bulan Iuran",
@@ -233,15 +246,22 @@ class _KasSettingPageState extends State<KasSettingPage> {
                 padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 15),
                 decoration: BoxDecoration(color: backgroundColor, borderRadius: BorderRadius.circular(15)),
                 child: Row(
-                  children: [
-                    Icon(Icons.event_available_rounded, color: primaryNavy),
+                  children:[
+                    Icon(Icons.event_available_rounded, color: primaryNavy, size: 22),
                     const SizedBox(width: 12),
+                    // Expanded agar jika format tanggal sangat panjang tidak overflow
                     Expanded(
                       child: Text(
                         _selectedDateTime == null
                             ? "Atur Batas Waktu (Deadline)"
                             : DateFormat('dd MMM yyyy, HH:mm').format(_selectedDateTime!),
-                        style: TextStyle(color: _selectedDateTime == null ? Colors.grey[600] : Colors.black87, fontSize: 14),
+                        style: TextStyle(
+                          color: _selectedDateTime == null ? Colors.grey[600] : Colors.black87, 
+                          fontSize: 14,
+                          fontWeight: _selectedDateTime == null ? FontWeight.normal : FontWeight.w600
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -251,18 +271,21 @@ class _KasSettingPageState extends State<KasSettingPage> {
             const SizedBox(height: 25),
             SizedBox(
               width: double.infinity,
-              height: 55,
-              child: _isSaving 
-                ? Center(child: CircularProgressIndicator(color: primaryNavy))
-                : ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryNavy,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                      elevation: 0,
-                    ),
-                    onPressed: _saveSettings,
-                    child: const Text("KIRIM TAGIHAN", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                  ),
+              height: 55, // Fixed height agar tombol tidak berubah ukuran saat loading
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryNavy,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  elevation: 0,
+                ),
+                onPressed: _isSaving ? null : _saveSettings,
+                child: _isSaving 
+                  ? const SizedBox(
+                      height: 24, width: 24, 
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5)
+                    )
+                  : const Text("KIRIM TAGIHAN", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
+              ),
             ),
           ],
         ),
@@ -280,12 +303,14 @@ class _KasSettingPageState extends State<KasSettingPage> {
     return TextFormField(
       controller: controller,
       keyboardType: isNumber ? TextInputType.number : TextInputType.text,
-      // Menggunakan formatter titik (.) sesuai locale Indonesia
-      inputFormatters: isNumber ? [FilteringTextInputFormatter.digitsOnly, ThousandsSeparatorFormatter()] : [],
-      validator: (v) => v!.isEmpty ? "Wajib diisi" : null,
+      inputFormatters: isNumber 
+          ? [FilteringTextInputFormatter.digitsOnly, ThousandsSeparatorFormatter()] 
+          :[],
+      validator: (v) => v!.isEmpty ? "Bidang ini wajib diisi" : null,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
+        labelStyle: TextStyle(color: Colors.grey[600], fontSize: 14),
         prefixIcon: Icon(icon, color: primaryNavy, size: 22),
         filled: true,
         fillColor: backgroundColor,
@@ -295,49 +320,91 @@ class _KasSettingPageState extends State<KasSettingPage> {
     );
   }
 
+  // --- FIX OVERFLOW & TAMPILAN LIST ---
   Widget _buildList() {
     return StreamBuilder<QuerySnapshot>(
-      // Ditambahkan OrderBy agar bendahara tidak bingung mencari data terbaru
       stream: FirebaseFirestore.instance
           .collection('kas_deadline')
           .where('groupId', isEqualTo: _myGroupId)
           .orderBy('created_at', descending: true)
           .snapshots(),
       builder: (context, snap) {
-        if (snap.hasError) return Text("Error: ${snap.error}");
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        // Penanganan error index firestore agar tidak layar merah
+        if (snap.hasError) return _buildErrorState(snap.error.toString());
+        if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
         
-        final docs = snap.data!.docs;
-        if (docs.isEmpty) return const Center(child: Text("Belum ada tagihan aktif."));
+        final docs = snap.data?.docs ??[];
+        if (docs.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text("Belum ada tagihan aktif.", style: TextStyle(color: Colors.grey[500])),
+            )
+          );
+        }
 
         return ListView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: docs.length,
           itemBuilder: (c, i) {
-            final d = docs[i];
-            // Safety check untuk data yang baru dikirim (server timestamp belum turun)
+            final d = docs[i].data() as Map<String, dynamic>;
+            final String docId = docs[i].id;
+            
             final dlTimestamp = d['tanggal_deadline'] as Timestamp?;
             final dl = dlTimestamp?.toDate() ?? DateTime.now();
+            final int nominal = d['nominal'] ?? 0;
+            final String nominalStr = NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0).format(nominal);
 
             return Container(
-              margin: const EdgeInsets.only(bottom: 12),
+              margin: const EdgeInsets.only(bottom: 15),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(15),
-                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 5)],
+                borderRadius: BorderRadius.circular(18),
+                boxShadow:[BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 4))],
               ),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: primaryNavy.withValues(alpha: 0.1),
-                  child: Icon(Icons.receipt_long_rounded, color: primaryNavy, size: 20),
-                ),
-                title: Text(d['bulan'] ?? "-", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                subtitle: Text("Batas: ${DateFormat('dd MMM yyyy').format(dl)}", style: const TextStyle(fontSize: 12)),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
-                  onPressed: () => _confirmDelete(d.reference),
-                ),
+              child: Row(
+                children:[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: primaryNavy.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.receipt_long_rounded, color: primaryNavy, size: 22),
+                  ),
+                  const SizedBox(width: 15),
+                  // Expanded agar informasi teks terbagi dengan baik dan bebas overflow
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children:[
+                        Text(d['bulan'] ?? "-", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        const SizedBox(height: 4),
+                        Text(
+                          "Kas: $nominalStr", 
+                          style: TextStyle(fontSize: 13, color: Colors.green[700], fontWeight: FontWeight.w600)
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          "Batas: ${DateFormat('dd MMM yyyy').format(dl)}", 
+                          style: TextStyle(fontSize: 12, color: Colors.grey[600])
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    icon: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
+                    ),
+                    onPressed: () => _confirmDelete(FirebaseFirestore.instance.collection('kas_deadline').doc(docId)),
+                  ),
+                ],
               ),
             );
           },
@@ -350,26 +417,74 @@ class _KasSettingPageState extends State<KasSettingPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        title: const Text("Hapus Tagihan?"),
-        content: const Text("Tindakan ini tidak dapat dibatalkan."),
-        actions: [
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("Hapus Tagihan?", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        content: const Text("Tagihan ini akan dihapus dari daftar semua anggota. Tindakan ini tidak dapat dibatalkan."),
+        actions:[
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Batal")),
-          TextButton(onPressed: () { ref.delete(); Navigator.pop(context); }, child: const Text("Hapus", style: TextStyle(color: Colors.red))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+            ),
+            onPressed: () { 
+              ref.delete(); 
+              Navigator.pop(context); 
+            }, 
+            child: const Text("Hapus", style: TextStyle(color: Colors.white)),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildNoGroupState() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children:[
+          Icon(Icons.group_off_rounded, size: 80, color: Colors.grey),
+          SizedBox(height: 15),
+          Text(
+            "Anda tidak terhubung dengan grup kas mana pun.",
+            style: TextStyle(color: Colors.grey, fontSize: 14),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(String error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Text(
+          error.contains("index") 
+            ? "Memerlukan sinkronisasi Indeks Database. Hubungi Pengembang." 
+            : "Gagal memuat daftar tagihan.",
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.grey, fontSize: 13),
+        ),
       ),
     );
   }
 }
 
-// FORMATTER TITIK INDONESIA (.)
+// --- FIX: Formatter Titik yang lebih aman dari crash ---
 class ThousandsSeparatorFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
     if (newValue.text.isEmpty) return newValue;
-    int value = int.parse(newValue.text.replaceAll('.', ''));
+    
+    // Cegah crash jika ada karakter selain angka
+    String cleanText = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (cleanText.isEmpty) return newValue;
+
+    int value = int.parse(cleanText);
     final formatter = NumberFormat.decimalPattern('id'); // Menggunakan locale Indonesia
     final newString = formatter.format(value);
+    
     return TextEditingValue(
       text: newString,
       selection: TextSelection.collapsed(offset: newString.length),

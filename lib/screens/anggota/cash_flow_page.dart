@@ -42,7 +42,7 @@ class _CashFlowPageState extends State<CashFlowPage> {
       }
     } catch (e) {
       if (!context.mounted) return;
-      ErrorService.show(context, e);
+      ErrorService.show(context, e); // Aman dipanggil di sini karena ini fungsi async, bukan di dalam build()
       if (mounted) setState(() => _isLoadingUser = false);
     }
   }
@@ -52,7 +52,7 @@ class _CashFlowPageState extends State<CashFlowPage> {
   }
 
   String _formatDate(dynamic ts) {
-    if (ts == null) return "-"; // Safety check jika tanggal kosong
+    if (ts == null) return "-";
     if (ts is Timestamp) {
       return DateFormat('dd MMM yyyy').format(ts.toDate());
     }
@@ -66,116 +66,158 @@ class _CashFlowPageState extends State<CashFlowPage> {
       appBar: AppBar(
         elevation: 0,
         backgroundColor: primaryNavy,
-        title: const Text("Riwayat Cash Flow", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        title: const Text("Riwayat Cash Flow", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18)),
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: _isLoadingUser 
       ? Center(child: CircularProgressIndicator(color: primaryNavy))
-      : Stack(
-          children: [
-            Container(
-              height: 80,
-              decoration: BoxDecoration(
-                color: primaryNavy,
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(30),
-                  bottomRight: Radius.circular(30),
+      : _userGroupId == null || _userGroupId!.isEmpty
+        ? _buildNoGroupState() // Cegah query jika user belum punya grup
+        : Stack(
+            children:[
+              // Background Header Biru
+              Container(
+                height: 60, // Ketinggian disesuaikan agar proporsional
+                decoration: BoxDecoration(
+                  color: primaryNavy,
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(30),
+                    bottomRight: Radius.circular(30),
+                  ),
                 ),
               ),
-            ),
-            
-            StreamBuilder<QuerySnapshot>(
-              // Optimasi: Tambahkan .limit untuk mencegah aplikasi lemot jika data ribuan
-              stream: FirebaseFirestore.instance
-                  .collection('transactions')
-                  .where('groupId', isEqualTo: _userGroupId)
-                  .orderBy('date', descending: true)
-                  .limit(100) // Ambil 100 transaksi terakhir saja untuk performa
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  // Jika muncul error index, cek konsol dan klik link yang diberikan Firebase
-                  return _buildErrorState(snapshot.error.toString());
-                }
+              
+              StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('transactions')
+                    .where('groupId', isEqualTo: _userGroupId)
+                    .orderBy('date', descending: true)
+                    .limit(100) // Batasi query demi performa
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return _buildErrorState(snapshot.error.toString());
+                  }
 
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator(color: Colors.white));
-                }
-                
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return _buildEmptyState();
-                }
-                
-                return ListView.builder(
-                  // physics agar scroll terasa premium
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
-                  itemCount: snapshot.data!.docs.length,
-                  itemBuilder: (context, index) {
-                    var doc = snapshot.data!.docs[index];
-                    var data = doc.data() as Map<String, dynamic>;
-                    bool isMasuk = data['type'] == 'masuk';
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator(color: Colors.white));
+                  }
+                  
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return _buildEmptyState();
+                  }
+                  
+                  return ListView.builder(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
+                    itemCount: snapshot.data!.docs.length,
+                    itemBuilder: (context, index) {
+                      var doc = snapshot.data!.docs[index];
+                      var data = doc.data() as Map<String, dynamic>;
+                      bool isMasuk = data['type'] == 'masuk';
 
-                    return _buildTransactionCard(data, isMasuk);
-                  },
-                );
-              },
-            ),
-          ],
-        ),
+                      return _buildTransactionCard(data, isMasuk);
+                    },
+                  );
+                },
+              ),
+            ],
+          ),
     );
   }
 
+  // --- FIX OVERFLOW: Menggunakan Custom Row pengganti ListTile ---
   Widget _buildTransactionCard(Map<String, dynamic> data, bool isMasuk) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 15),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
+        borderRadius: BorderRadius.circular(22),
+        boxShadow:[
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
-            offset: const Offset(0, 4),
+            offset: const Offset(0, 5),
           )
         ],
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: isMasuk ? Colors.green[50] : Colors.red[50],
-            borderRadius: BorderRadius.circular(15),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children:[
+          // Ikon Transaksi
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isMasuk ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              isMasuk ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
+              color: isMasuk ? Colors.green[700] : Colors.red[700],
+              size: 24,
+            ),
           ),
-          child: Icon(
-            isMasuk ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
-            color: isMasuk ? Colors.green[700] : Colors.red[700],
-            size: 24,
+          const SizedBox(width: 15),
+          
+          // Keterangan & Tanggal (Gunakan Expanded agar sisa layar terisi otomatis)
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children:[
+                Text(
+                  data['keterangan'] ?? "Tanpa Keterangan",
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF2D3142)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis, // Cegah tulisan panjang jebol ke bawah
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _formatDate(data['date']),
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
-        ),
-        title: Text(
-          data['keterangan'] ?? "Tanpa Keterangan",
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF2D3142)),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            _formatDate(data['date']),
-            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+          const SizedBox(width: 10),
+          
+          // Nominal Uang (Dibungkus Flexible + FittedBox agar angka besar mengecil otomatis)
+          Flexible(
+            flex: 0,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                "${isMasuk ? '+' : '-'} ${_formatCurrency((data['jumlah'] ?? 0).toDouble())}",
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 14,
+                  color: isMasuk ? Colors.green[700] : Colors.red[700],
+                ),
+              ),
+            ),
           ),
-        ),
-        trailing: Text(
-          "${isMasuk ? '+' : '-'} ${_formatCurrency((data['jumlah'] ?? 0).toDouble())}",
-          style: TextStyle(
-            fontWeight: FontWeight.w900,
-            fontSize: 13,
-            color: isMasuk ? Colors.green[700] : Colors.red[700],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoGroupState() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children:[
+          Icon(Icons.group_off_rounded, size: 80, color: Colors.grey),
+          SizedBox(height: 15),
+          Text(
+            "Anda belum bergabung ke grup mana pun.",
+            style: TextStyle(color: Colors.grey, fontSize: 14),
+            textAlign: TextAlign.center,
           ),
-        ),
+        ],
       ),
     );
   }
@@ -184,8 +226,8 @@ class _CashFlowPageState extends State<CashFlowPage> {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.receipt_long_rounded, size: 80, color: Colors.grey[300]),
+        children:[
+          Icon(Icons.receipt_long_rounded, size: 80, color: Colors.grey.withValues(alpha: 0.5)),
           const SizedBox(height: 15),
           const Text(
             "Belum ada riwayat transaksi",
@@ -202,15 +244,17 @@ class _CashFlowPageState extends State<CashFlowPage> {
         padding: const EdgeInsets.all(30),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline_rounded, color: Colors.red, size: 50),
-            const SizedBox(height: 10),
-            const Text("Oops! Terjadi kesalahan.", style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 5),
+          children:[
+            const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 60),
+            const SizedBox(height: 15),
+            const Text("Oops! Terjadi kesalahan.", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 8),
             Text(
-              error.contains("index") ? "Database memerlukan sinkronisasi indeks. Silakan hubungi pengembang." : error,
+              error.contains("index") 
+                ? "Database memerlukan sinkronisasi indeks. Silakan hubungi pengembang." 
+                : error,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              style: const TextStyle(fontSize: 13, color: Colors.grey),
             ),
           ],
         ),

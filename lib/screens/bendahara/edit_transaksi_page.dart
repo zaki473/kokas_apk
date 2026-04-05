@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Tambahan untuk formatters
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '/services/error_service.dart';
@@ -25,29 +25,23 @@ class _EditTransaksiPageState extends State<EditTransaksiPage> {
   late String _type;
   bool _isLoading = false;
 
-  // Formatter untuk standarisasi tampilan nominal
   final _formatter = NumberFormat.decimalPattern('id');
+  final Color primaryNavy = const Color(0xFF1A237E);
 
   @override
   void initState() {
     super.initState();
-    // Inisialisasi data lama ke dalam form
-    _ketController = TextEditingController(
-      text: widget.currentData['keterangan'],
-    );
+    _ketController = TextEditingController(text: widget.currentData['keterangan'] ?? "");
 
-    // Optimasi: Tampilkan nominal langsung dengan format titik saat pertama buka
-    int initialAmount = (widget.currentData['jumlah'] ?? 0).toInt();
-    _jumlahController = TextEditingController(
-      text: _formatter.format(initialAmount),
-    );
+    // Parsing aman untuk nominal awal
+    num initialAmount = widget.currentData['jumlah'] ?? 0;
+    _jumlahController = TextEditingController(text: _formatter.format(initialAmount.toInt()));
 
     _type = widget.currentData['type'] ?? 'masuk';
   }
 
   @override
   void dispose() {
-    // WAJIB: Mencegah memory leak
     _ketController.dispose();
     _jumlahController.dispose();
     super.dispose();
@@ -57,26 +51,23 @@ class _EditTransaksiPageState extends State<EditTransaksiPage> {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
       try {
-        // Parsing aman: Hapus titik dan simbol mata uang sebelum simpan ke Firestore
-        final cleanAmount = _jumlahController.text
-            .replaceAll('.', '')
-            .replaceAll('Rp ', '');
+        final cleanAmount = _jumlahController.text.replaceAll('.', '').replaceAll('Rp ', '');
         final finalAmount = int.tryParse(cleanAmount) ?? 0;
 
         await FirebaseFirestore.instance
             .collection('transactions')
             .doc(widget.docId)
             .update({
-              'keterangan': _ketController.text.trim(),
-              'jumlah': finalAmount,
-              'type': _type,
-            });
+          'keterangan': _ketController.text.trim(),
+          'jumlah': finalAmount,
+          'type': _type,
+          'updatedAt': FieldValue.serverTimestamp(), // Tambahkan audit log simpel
+        });
 
         if (!mounted) return;
         Navigator.pop(context);
         ErrorService.showSuccess(context, "Transaksi berhasil diperbarui");
       } catch (e) {
-        if (!mounted) return;
         ErrorService.show(context, e);
       } finally {
         if (mounted) setState(() => _isLoading = false);
@@ -87,143 +78,78 @@ class _EditTransaksiPageState extends State<EditTransaksiPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8),
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF1A237E),
-        title: const Text(
-          "Edit Transaksi",
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-        ),
+        backgroundColor: primaryNavy,
+        title: const Text("Edit Transaksi", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Stack(
         children: [
           Container(
-            height: 80,
-            decoration: const BoxDecoration(
-              color: Color(0xFF1A237E),
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(30),
-                bottomRight: Radius.circular(30),
-              ),
+            height: 60,
+            decoration: BoxDecoration(
+              color: primaryNavy,
+              borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
             ),
           ),
-
           SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
+            padding: const EdgeInsets.fromLTRB(25, 10, 25, 40),
             child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Type Selector Card
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 10,
-                        ),
-                      ],
+                      borderRadius: BorderRadius.circular(22),
+                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 15, offset: const Offset(0, 5))],
                     ),
                     child: Row(
                       children: [
-                        Expanded(
-                          child: _buildTypeSelector(
-                            "masuk",
-                            "Uang Masuk",
-                            Icons.arrow_downward,
-                            Colors.green,
-                          ),
-                        ),
-                        Expanded(
-                          child: _buildTypeSelector(
-                            "keluar",
-                            "Uang Keluar",
-                            Icons.arrow_upward,
-                            Colors.red,
-                          ),
-                        ),
+                        Expanded(child: _buildTypeSelector("masuk", "Pemasukan", Icons.add_circle_outline, Colors.green)),
+                        const SizedBox(width: 10),
+                        Expanded(child: _buildTypeSelector("keluar", "Pengeluaran", Icons.remove_circle_outline, Colors.red)),
                       ],
                     ),
                   ),
 
-                  const SizedBox(height: 25),
-                  const Text(
-                    "Koreksi Data",
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1A237E),
-                    ),
-                  ),
+                  const SizedBox(height: 30),
+                  Text("Informasi Transaksi", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primaryNavy)),
                   const SizedBox(height: 15),
 
                   _buildInputField(
                     controller: _ketController,
                     label: "Keterangan",
-                    hint: "Ubah keterangan...",
+                    hint: "Contoh: Iuran Kas Minggu 1",
                     icon: Icons.edit_note_rounded,
-                    validator: (v) => v!.isEmpty ? "Isi keterangan" : null,
+                    validator: (v) => v!.isEmpty ? "Keterangan tidak boleh kosong" : null,
                   ),
 
                   const SizedBox(height: 20),
 
                   _buildInputField(
                     controller: _jumlahController,
-                    label: "Jumlah Nominal",
+                    label: "Nominal",
                     hint: "0",
                     icon: Icons.payments_outlined,
                     isNumber: true,
                     prefix: "Rp ",
-                    // Formatter agar saat diedit tetap muncul titik otomatis
                     inputFormatters: [
                       FilteringTextInputFormatter.digitsOnly,
                       ThousandsSeparatorInputFormatter(),
                     ],
-                    validator: (v) {
-                      if (v!.isEmpty) return "Isi jumlah";
-                      return null;
-                    },
+                    validator: (v) => v!.isEmpty ? "Masukkan jumlah nominal" : null,
                   ),
 
                   const SizedBox(height: 40),
 
-                  SizedBox(
-                    width: double.infinity,
-                    height: 60,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1A237E),
-                        foregroundColor: Colors.white,
-                        elevation: 5,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                      ),
-                      onPressed: _isLoading ? null : _updateTransaksi,
-                      child: _isLoading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.check_circle_outline_rounded),
-                                SizedBox(width: 10),
-                                Text(
-                                  "SIMPAN PERUBAHAN",
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                    ),
-                  ),
+                  _isLoading ? _buildLoadingIndicator() : _buildSubmitButton(),
                 ],
               ),
             ),
@@ -233,40 +159,55 @@ class _EditTransaksiPageState extends State<EditTransaksiPage> {
     );
   }
 
-  Widget _buildTypeSelector(
-    String typeValue,
-    String label,
-    IconData icon,
-    Color color,
-  ) {
-    bool isSelected = _type == typeValue;
+  Widget _buildTypeSelector(String value, String label, IconData icon, Color activeColor) {
+    bool isSelected = _type == value;
     return GestureDetector(
-      onTap: () => setState(() => _type = typeValue),
+      onTap: () => setState(() => _type = value),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        padding: const EdgeInsets.symmetric(vertical: 15),
+        duration: const Duration(milliseconds: 250),
+        padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: isSelected ? color : Colors.transparent,
+          color: isSelected ? activeColor : Colors.grey[50]?.withValues(alpha: 0.5) ?? Colors.grey[50]!,
           borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: isSelected ? activeColor : Colors.grey[200]!),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              color: isSelected ? Colors.white : Colors.grey,
-              size: 20,
-            ),
+            Icon(icon, color: isSelected ? Colors.white : Colors.grey[400], size: 20),
             const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? Colors.white : Colors.grey,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            Text(label, style: TextStyle(color: isSelected ? Colors.white : Colors.grey[600], fontWeight: FontWeight.bold)),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 60,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primaryNavy,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          elevation: 2,
+        ),
+        onPressed: _updateTransaksi,
+        child: const Text("SIMPAN PERUBAHAN", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 1.1)),
+      ),
+    );
+  }
+
+  Widget _buildLoadingIndicator() {
+    return Center(
+      child: Column(
+        children: [
+          CircularProgressIndicator(color: primaryNavy),
+          const SizedBox(height: 15),
+          const Text("Menyimpan perubahan...", style: TextStyle(fontSize: 12, color: Colors.grey)),
+        ],
       ),
     );
   }
@@ -281,52 +222,30 @@ class _EditTransaksiPageState extends State<EditTransaksiPage> {
     List<TextInputFormatter>? inputFormatters,
     String? Function(String?)? validator,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: TextFormField(
-        controller: controller,
-        keyboardType: isNumber ? TextInputType.number : TextInputType.text,
-        validator: validator,
-        inputFormatters: inputFormatters,
-        style: const TextStyle(fontWeight: FontWeight.bold),
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: hint,
-          prefixText: prefix,
-          prefixIcon: Icon(icon, color: const Color(0xFF1A237E)),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(18),
-            borderSide: BorderSide.none,
-          ),
-          filled: true,
-          fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(
-            vertical: 18,
-            horizontal: 20,
-          ),
-        ),
+    return TextFormField(
+      controller: controller,
+      keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+      validator: validator,
+      inputFormatters: inputFormatters,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        prefixText: prefix,
+        prefixIcon: Icon(icon, color: primaryNavy),
+        filled: true,
+        fillColor: Colors.white,
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: Colors.grey[200]!)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: primaryNavy, width: 2)),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)),
+        contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
       ),
     );
   }
 }
 
-// Standarisasi Formatter Indonesia (.)
 class ThousandsSeparatorInputFormatter extends TextInputFormatter {
   @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
     if (newValue.text.isEmpty) return newValue;
     int value = int.parse(newValue.text.replaceAll('.', ''));
     final formatter = NumberFormat.decimalPattern('id');

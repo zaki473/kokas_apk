@@ -40,7 +40,7 @@ class _DaftarTagihanPageState extends State<DaftarTagihanPage> {
         });
       }
     } catch (e) {
-      if (!context.mounted) return;
+      if (!mounted) return;
       ErrorService.show(context, e);
     }
   }
@@ -52,7 +52,10 @@ class _DaftarTagihanPageState extends State<DaftarTagihanPage> {
   @override
   Widget build(BuildContext context) {
     if (_isLoadingUser) {
-      return Scaffold(body: Center(child: CircularProgressIndicator(color: primaryNavy)));
+      return Scaffold(
+        backgroundColor: backgroundColor,
+        body: Center(child: CircularProgressIndicator(color: primaryNavy))
+      );
     }
 
     return Scaffold(
@@ -66,32 +69,38 @@ class _DaftarTagihanPageState extends State<DaftarTagihanPage> {
       ),
       body: Stack(
         children: [
+          // Background Header
           Container(
-            height: 100,
+            height: 120,
             decoration: BoxDecoration(
               color: primaryNavy,
-              borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(30), 
+                bottomRight: Radius.circular(30)
+              ),
             ),
           ),
           Column(
             children: [
               _buildInfoBox(),
               Expanded(
-                // OPTIMASI: Gunakan StreamBuilder Utama untuk List Tagihan
                 child: StreamBuilder<QuerySnapshot>(
+                  // Note: Pastikan sudah membuat Index di Firebase Console untuk query ini
                   stream: FirebaseFirestore.instance
                       .collection('kas_deadline')
                       .where('groupId', isEqualTo: _userGroupId)
-                      .orderBy('tanggal_deadline', descending: true) // Pastikan sudah buat Composite Index di Firebase
+                      .orderBy('tanggal_deadline', descending: true)
                       .snapshots(),
                   builder: (context, deadlineSnap) {
-                    if (deadlineSnap.hasError) return Center(child: Text("Terjadi kesalahan indeks."));
+                    if (deadlineSnap.hasError) {
+                      debugPrint(deadlineSnap.error.toString());
+                      return const Center(child: Text("Gagal memuat data. Periksa indeks Firestore."));
+                    }
                     if (!deadlineSnap.hasData) return const Center(child: CircularProgressIndicator());
 
                     final listTagihan = deadlineSnap.data!.docs;
                     if (listTagihan.isEmpty) return _buildEmptyState();
 
-                    // OPTIMASI: Gunakan StreamBuilder kedua hanya SEKALI untuk semua pembayaran user ini
                     return StreamBuilder<QuerySnapshot>(
                       stream: FirebaseFirestore.instance
                           .collection('pembayaran')
@@ -100,8 +109,7 @@ class _DaftarTagihanPageState extends State<DaftarTagihanPage> {
                       builder: (context, paySnap) {
                         if (!paySnap.hasData) return const Center(child: CircularProgressIndicator());
 
-                        // Buat Map untuk lookup status pembayaran dengan cepat (O(1))
-                        // Key: Bulan, Value: Status
+                        // Lookup Map untuk efisiensi O(1)
                         Map<String, String> paymentStatusMap = {};
                         for (var doc in paySnap.data!.docs) {
                           paymentStatusMap[doc['bulan']] = doc['status'];
@@ -109,7 +117,7 @@ class _DaftarTagihanPageState extends State<DaftarTagihanPage> {
 
                         return ListView.builder(
                           physics: const BouncingScrollPhysics(),
-                          padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 15),
                           itemCount: listTagihan.length,
                           itemBuilder: (context, index) {
                             var d = listTagihan[index];
@@ -119,7 +127,7 @@ class _DaftarTagihanPageState extends State<DaftarTagihanPage> {
 
                             String status = paymentStatusMap[bulan] ?? 'belum_bayar';
 
-                            // JIKA DITERIMA -> JANGAN TAMPILKAN (Sesuai Logika Kamu)
+                            // Sembunyikan jika sudah sukses/disetujui
                             if (status == 'disetujui' || status == 'sukses') {
                               return const SizedBox.shrink();
                             }
@@ -143,18 +151,18 @@ class _DaftarTagihanPageState extends State<DaftarTagihanPage> {
     bool isOverdue = DateTime.now().isAfter(deadline);
     
     Color statusColor = primaryNavy;
-    String btnText = "Bayar";
+    String btnText = "BAYAR";
     String statusLabel = "";
     bool isPending = status == 'pending';
     bool isRejected = status == 'ditolak';
 
     if (isPending) {
       statusColor = Colors.orange;
-      btnText = "Proses";
+      btnText = "PROSES";
       statusLabel = "Menunggu Verifikasi";
     } else if (isRejected) {
       statusColor = Colors.red;
-      btnText = "Re-Bayar";
+      btnText = "RE-BAYAR";
       statusLabel = "Ditolak (Bayar Ulang)";
     }
 
@@ -163,79 +171,105 @@ class _DaftarTagihanPageState extends State<DaftarTagihanPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04), 
+            blurRadius: 12, 
+            offset: const Offset(0, 4)
+          )
+        ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          children: [
-            _buildIconStatus(isRejected, statusColor),
-            const SizedBox(width: 15),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Iuran $bulan", style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: primaryNavy)),
-                  Text(_formatCurrency(nominal), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                  if (statusLabel.isNotEmpty)
-                    Text(statusLabel, style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(Icons.event_note_rounded, size: 12, color: isOverdue ? Colors.red : Colors.grey),
-                      const SizedBox(width: 4),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(left: BorderSide(color: statusColor, width: 6)),
+          ),
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Iuran $bulan", 
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primaryNavy)
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _formatCurrency(nominal), 
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.black87)
+                    ),
+                    const SizedBox(height: 8),
+                    if (statusLabel.isNotEmpty) ...[
                       Text(
-                        "Deadline: ${DateFormat('dd MMM').format(deadline)}",
-                        style: TextStyle(color: isOverdue ? Colors.red : Colors.grey[600], fontSize: 11),
+                        statusLabel, 
+                        style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold)
                       ),
+                      const SizedBox(height: 4),
                     ],
-                  ),
-                ],
+                    Row(
+                      children: [
+                        Icon(Icons.access_time_rounded, size: 14, color: isOverdue ? Colors.red : Colors.grey[600]),
+                        const SizedBox(width: 5),
+                        Text(
+                          "Deadline: ${DateFormat('dd MMM yyyy').format(deadline)}",
+                          style: TextStyle(color: isOverdue ? Colors.red : Colors.grey[600], fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-            _buildActionButton(bulan, nominal, deadline, statusColor, btnText, isPending),
-          ],
+              _buildActionButton(bulan, nominal, deadline, statusColor, btnText, isPending),
+            ],
+          ),
         ),
       ),
-    );
-  }
-
-  Widget _buildIconStatus(bool isRejected, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
-      child: Icon(isRejected ? Icons.warning_amber_rounded : Icons.receipt_long_rounded, color: color, size: 22),
     );
   }
 
   Widget _buildActionButton(String bulan, int nominal, DateTime deadline, Color color, String text, bool isPending) {
     return ElevatedButton(
       onPressed: isPending ? null : () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => BayarKasPage(bulan: bulan, nominal: nominal, deadline: deadline)));
+        Navigator.push(
+          context, 
+          MaterialPageRoute(builder: (_) => BayarKasPage(bulan: bulan, nominal: nominal, deadline: deadline))
+        );
       },
       style: ElevatedButton.styleFrom(
         backgroundColor: color,
         foregroundColor: Colors.white,
         disabledBackgroundColor: Colors.grey[200],
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         elevation: 0,
       ),
-      child: Text(text, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+      child: Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
     );
   }
 
   Widget _buildInfoBox() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(25, 10, 25, 5),
+      padding: const EdgeInsets.fromLTRB(25, 15, 25, 5),
       child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.9), borderRadius: BorderRadius.circular(15)),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.95), 
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]
+        ),
         child: Row(
           children: [
-            Icon(Icons.lightbulb_outline_rounded, color: primaryNavy, size: 18),
-            const SizedBox(width: 8),
-            const Expanded(child: Text("Tagihan otomatis hilang jika sudah lunas diverifikasi.", style: TextStyle(fontSize: 11))),
+            Icon(Icons.info_outline_rounded, color: primaryNavy, size: 20),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                "Tagihan otomatis hilang jika sudah diverifikasi oleh bendahara.", 
+                style: TextStyle(fontSize: 11.5, color: Colors.black87, height: 1.3)
+              )
+            ),
           ],
         ),
       ),
@@ -247,9 +281,24 @@ class _DaftarTagihanPageState extends State<DaftarTagihanPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.verified_rounded, size: 80, color: Colors.green[100]),
-          const SizedBox(height: 10),
-          const Text("Luar Biasa! Semua Tagihan Lunas.", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.green.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.check_circle_outline_rounded, size: 80, color: Colors.green),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            "Semua Tagihan Lunas!", 
+            style: TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.bold)
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Terima kasih sudah membayar tepat waktu.", 
+            style: TextStyle(color: Colors.grey[600], fontSize: 14)
+          ),
         ],
       ),
     );

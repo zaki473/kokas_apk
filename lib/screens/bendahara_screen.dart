@@ -86,23 +86,25 @@ class _BendaharaScreenState extends State<BendaharaScreen> {
             return Scaffold(
               backgroundColor: const Color(0xFFF4F6F8),
               body: Stack(
-                children: [
+                children:[
                   _buildHeaderBg(),
                   SafeArea(
                     child: CustomScrollView(
                       physics: const BouncingScrollPhysics(),
-                      slivers: [
+                      slivers:[
                         _buildAppBar(namaBendahara, namaGrup),
                         SliverToBoxAdapter(child: _buildBalanceCard(context, balance, groupId)),
-                        SliverToBoxAdapter(child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
-                          child: _buildQuickMenu(context),
-                        )),
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                            child: _buildQuickMenu(context),
+                          ),
+                        ),
                         _buildSectionLabel("Statistik Kas"),
                         SliverToBoxAdapter(child: _buildMiniStats(totalIn, totalOut)),
                         _buildSectionLabel("Menu Lainnya"),
                         _buildOtherMenuGrid(context),
-                        const SliverToBoxAdapter(child: SizedBox(height: 50)),
+                        const SliverToBoxAdapter(child: SizedBox(height: 50)), // Spasi bawah
                       ],
                     ),
                   ),
@@ -117,14 +119,17 @@ class _BendaharaScreenState extends State<BendaharaScreen> {
 
   Widget _buildHeaderBg() {
     return Container(
-      height: 220,
+      height: 240, // Sedikit ditinggikan agar aman di layar notch
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF1A237E), Color(0xFF3949AB)],
+          colors:[Color(0xFF1A237E), Color(0xFF3949AB)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.only(bottomLeft: Radius.circular(40), bottomRight: Radius.circular(40)),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(40),
+          bottomRight: Radius.circular(40),
+        ),
       ),
     );
   }
@@ -132,17 +137,31 @@ class _BendaharaScreenState extends State<BendaharaScreen> {
   Widget _buildAppBar(String nama, String grup) {
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 15),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text("Halo Bendahara, $nama", style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                Text(grup, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-              ],
+          children:[
+            // Gunakan Expanded agar teks panjang tidak overflow
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children:[
+                  Text(
+                    "Halo Bendahara, $nama",
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    grup,
+                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
             ),
+            const SizedBox(width: 15),
             _buildLogoutButton(context),
           ],
         ),
@@ -153,22 +172,26 @@ class _BendaharaScreenState extends State<BendaharaScreen> {
   Widget _buildSectionLabel(String text) {
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(25, 20, 25, 12), // Jarak antar section ditambah
-        child: Text(text, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A237E))),
+        padding: const EdgeInsets.fromLTRB(25, 20, 25, 12),
+        child: Text(
+          text,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A237E)),
+        ),
       ),
     );
   }
 
-  // --- FIX GRID PENYET ---
+  // --- FIX GRID AGAR TIDAK PENYET & RESPONSIVE ---
   Widget _buildOtherMenuGrid(BuildContext context) {
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 25),
       sliver: SliverGrid(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
+        // Menggunakan MaxCrossAxisExtent agar menyesuaikan lebar HP
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 200, // Maksimal lebar kotak
           mainAxisSpacing: 15,
           crossAxisSpacing: 15,
-          childAspectRatio: 1.2, // Rasio diubah dari 1.5 ke 1.2 agar kotak lebih tinggi
+          childAspectRatio: 1.1, // Rasio ideal agar tidak kepanjangan/kependekan
         ),
         delegate: SliverChildListDelegate([
           _buildWideMenuItem(context, "Atur Kas", Icons.settings_rounded, Colors.indigo, const KasSettingPage()),
@@ -179,14 +202,14 @@ class _BendaharaScreenState extends State<BendaharaScreen> {
     );
   }
 
-  // --- FIX STATISTIK KAS ---
+  // --- FIX STATISTIK KAS RESPONSIVE ---
   Widget _buildMiniStats(double incoming, double outgoing) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 25),
       child: Row(
-        children: [
+        children:[
           Expanded(child: _itemStat("Masuk", formatCompact(incoming), Icons.arrow_downward, Colors.green)),
-          const SizedBox(width: 15), // Jarak antar kotak statistik ditambah
+          const SizedBox(width: 15),
           Expanded(child: _itemStat("Keluar", formatCompact(outgoing), Icons.arrow_upward, Colors.red)),
         ],
       ),
@@ -195,21 +218,23 @@ class _BendaharaScreenState extends State<BendaharaScreen> {
 
   Widget _itemStat(String label, String value, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(16), // Padding ditambah dari 12 ke 16 agar tidak penyet
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
       decoration: BoxDecoration(
-        color: Colors.white, // Background putih agar lebih clean
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow:[BoxShadow(color: color.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 4))],
       ),
-      child: Column( // Diubah ke Column agar susunan lebih vertikal/lega
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 20),
+        children:[
+          Icon(icon, color: color, size: 24),
           const SizedBox(height: 10),
-          Text(label, style: const TextStyle(fontSize: 11, color: Colors.black54)),
+          Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54), maxLines: 1, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 2),
           FittedBox(
             fit: BoxFit.scaleDown,
-            child: Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+            alignment: Alignment.centerLeft,
+            child: Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -221,7 +246,7 @@ class _BendaharaScreenState extends State<BendaharaScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(22),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow:[BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Material(
         color: Colors.transparent,
@@ -229,14 +254,26 @@ class _BendaharaScreenState extends State<BendaharaScreen> {
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => page)),
           borderRadius: BorderRadius.circular(22),
           child: Padding(
-            padding: const EdgeInsets.all(15),
-            child: Column( // Diubah ke Column agar lebih proporsional di grid
+            padding: const EdgeInsets.all(12),
+            child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Icon(icon, color: color, size: 30),
-                const SizedBox(height: 10),
-                Text(title, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              children:[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: color, size: 28),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  maxLines: 1, // Agar tidak tumpah ke bawah
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
               ],
             ),
           ),
@@ -245,6 +282,7 @@ class _BendaharaScreenState extends State<BendaharaScreen> {
     );
   }
 
+  // --- FIX BALANCE CARD MENCEGAH OVERFLOW ---
   Widget _buildBalanceCard(BuildContext context, double balance, String code) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
@@ -253,20 +291,24 @@ class _BendaharaScreenState extends State<BendaharaScreen> {
         color: const Color(0xFF282C34),
         borderRadius: BorderRadius.circular(30),
         gradient: const LinearGradient(
-          colors: [Color(0xFF282C34), Color(0xFF3E4451)],
+          colors:[Color(0xFF282C34), Color(0xFF3E4451)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 15, offset: const Offset(0, 8))],
+        boxShadow:[BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 15, offset: const Offset(0, 8))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+        children:[
           const Text("SALDO KAS SAAT INI", style: TextStyle(color: Colors.white60, fontSize: 10, letterSpacing: 1.2)),
           const SizedBox(height: 10),
           FittedBox(
             fit: BoxFit.scaleDown,
-            child: Text(formatCurrency(balance), style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
+            alignment: Alignment.centerLeft,
+            child: Text(
+              formatCurrency(balance),
+              style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
+            ),
           ),
           const SizedBox(height: 25),
           _buildCodeBadge(context, code),
@@ -277,45 +319,62 @@ class _BendaharaScreenState extends State<BendaharaScreen> {
 
   Widget _buildCodeBadge(BuildContext context, String code) {
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(15)),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(15),
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text("KODE GRUP", style: TextStyle(color: Colors.white38, fontSize: 9)),
-              Text(code, style: const TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold, fontSize: 12)),
-            ],
+        children:[
+          // Expanded agar tidak menabrak tombol copy
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children:[
+                const Text("KODE GRUP", style: TextStyle(color: Colors.white54, fontSize: 9)),
+                const SizedBox(height: 2),
+                Text(
+                  code,
+                  style: const TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold, fontSize: 14),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
           IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
             onPressed: () {
               Clipboard.setData(ClipboardData(text: code));
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Kode disalin!"), behavior: SnackBarBehavior.floating));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Kode disalin!"), behavior: SnackBarBehavior.floating),
+              );
             },
-            icon: const Icon(Icons.copy_rounded, color: Colors.white70, size: 18),
+            icon: const Icon(Icons.copy_rounded, color: Colors.white70, size: 20),
           )
         ],
       ),
     );
   }
 
+  // --- FIX QUICK MENU RESPONSIVE DI LAYAR KECIL ---
   Widget _buildQuickMenu(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 20),
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(25),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 15)],
+        boxShadow:[BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 15)],
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _buildQuickAction(context, "Input", Icons.add_box_rounded, Colors.blue, const TambahTransaksiPage()),
-          _buildQuickAction(context, "Verif", Icons.verified_user_rounded, Colors.teal, const VerifikasiBayarPage()),
-          _buildQuickAction(context, "Rekap", Icons.analytics_rounded, Colors.orange, const RekapPage()),
-          _buildQuickAction(context, "Reimburse", Icons.account_balance_wallet_rounded, Colors.redAccent, const ReimbursePage()),
+        // Expanded di dalam tiap item akan menjamin pembagian lebar rata
+        children:[
+          Expanded(child: _buildQuickAction(context, "Input", Icons.add_box_rounded, Colors.blue, const TambahTransaksiPage())),
+          Expanded(child: _buildQuickAction(context, "Verif", Icons.verified_user_rounded, Colors.teal, const VerifikasiBayarPage())),
+          Expanded(child: _buildQuickAction(context, "Rekap", Icons.analytics_rounded, Colors.orange, const RekapPage())),
+          Expanded(child: _buildQuickAction(context, "Reimburse", Icons.account_balance_wallet_rounded, Colors.redAccent, const ReimbursePage())),
         ],
       ),
     );
@@ -325,14 +384,18 @@ class _BendaharaScreenState extends State<BendaharaScreen> {
     return GestureDetector(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => page)),
       child: Column(
-        children: [
+        mainAxisSize: MainAxisSize.min, // Agar column sesuai dengan konten
+        children:[
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
-            child: Icon(icon, color: color, size: 26),
+            child: Icon(icon, color: color, size: 24),
           ),
           const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+          FittedBox(
+            fit: BoxFit.scaleDown, // Teks mengecil jika HP terlalu sempit
+            child: Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+          ),
         ],
       ),
     );
@@ -341,20 +404,34 @@ class _BendaharaScreenState extends State<BendaharaScreen> {
   Widget _buildNoGroupUI() {
     return Scaffold(
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.group_off_rounded, size: 80, color: Colors.grey),
-            const SizedBox(height: 16),
-            const Text("Anda belum memiliki grup kas aktif"),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () => Navigator.pushNamed(context, '/setupGroup'),
-              child: const Text("Buat / Gabung Grup"),
-            ),
-            const SizedBox(height: 10),
-            TextButton(onPressed: () => AuthService().signOut(), child: const Text("Logout")),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(30.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children:[
+              const Icon(Icons.group_off_rounded, size: 80, color: Colors.grey),
+              const SizedBox(height: 16),
+              const Text(
+                "Anda belum memiliki grup kas aktif",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                ),
+                onPressed: () => Navigator.pushNamed(context, '/setupGroup'),
+                child: const Text("Buat / Gabung Grup"),
+              ),
+              const SizedBox(height: 10),
+              TextButton(
+                onPressed: () => AuthService().signOut(),
+                child: const Text("Logout", style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -362,10 +439,12 @@ class _BendaharaScreenState extends State<BendaharaScreen> {
 
   Widget _buildLogoutButton(BuildContext context) {
     return IconButton(
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(),
       onPressed: () => _showLogoutDialog(context),
       icon: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
         child: const Icon(Icons.logout_rounded, color: Colors.white, size: 20),
       ),
     );
@@ -378,7 +457,7 @@ class _BendaharaScreenState extends State<BendaharaScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text("Logout"),
         content: const Text("Yakin ingin keluar dari sistem?"),
-        actions: [
+        actions:[
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Batal")),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),

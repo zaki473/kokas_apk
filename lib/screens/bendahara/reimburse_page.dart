@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '/services/error_service.dart';
 
 class ReimbursePage extends StatefulWidget {
   const ReimbursePage({super.key});
@@ -13,8 +14,12 @@ class ReimbursePage extends StatefulWidget {
 }
 
 class _ReimbursePageState extends State<ReimbursePage> {
+  final Color primaryNavy = const Color(0xFF1A237E);
+  final Color backgroundColor = const Color(0xFFF4F6F8);
+
   String? _groupId;
   bool _isLoadingGroup = true;
+  
   // Cache untuk gambar agar tidak lag saat scroll
   final Map<String, Uint8List> _imageCache = {};
 
@@ -47,71 +52,131 @@ class _ReimbursePageState extends State<ReimbursePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8),
+      backgroundColor: backgroundColor,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF1A237E),
+        backgroundColor: primaryNavy,
         title: const Text(
           "Verifikasi Reimburse",
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18),
         ),
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: _isLoadingGroup
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF1A237E)))
-          : Stack(
-              children: [
-                Container(
-                  height: 100,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF1A237E),
-                    borderRadius: BorderRadius.only(
-                      bottomLeft: Radius.circular(30),
-                      bottomRight: Radius.circular(30),
+          ? Center(child: CircularProgressIndicator(color: primaryNavy))
+          : _groupId == null || _groupId!.isEmpty
+              ? _buildNoGroupState()
+              : Stack(
+                  children:[
+                    // Background atas biru
+                    Container(
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: primaryNavy,
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(30),
+                          bottomRight: Radius.circular(30),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                StreamBuilder<QuerySnapshot>(
-                  // OPTIMASI QA: Gunakan orderBy di Firestore agar HP tidak kerja berat menyortir data
-                  stream: FirebaseFirestore.instance
-                      .collection('reimbursements')
-                      .where('groupId', isEqualTo: _groupId)
-                      .orderBy('tanggal_kirim', descending: true)
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      return Center(child: Text("Error: Pastikan index sudah dibuat."));
-                    }
-                    if (!snapshot.hasData) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
+                    
+                    StreamBuilder<QuerySnapshot>(
+                      // OPTIMASI: Gunakan limit untuk mencegah memori penuh
+                      stream: FirebaseFirestore.instance
+                          .collection('reimbursements')
+                          .where('groupId', isEqualTo: _groupId)
+                          .orderBy('tanggal_kirim', descending: true)
+                          .limit(50)
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError) {
+                          return _buildErrorState(snapshot.error.toString());
+                        }
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(child: CircularProgressIndicator(color: Colors.white));
+                        }
 
-                    final docs = snapshot.data!.docs;
-                    if (docs.isEmpty) {
-                      return const Center(
-                        child: Text("Belum ada pengajuan reimburse.",
-                            style: TextStyle(color: Colors.grey)),
-                      );
-                    }
+                        final docs = snapshot.data?.docs ?? [];
+                        if (docs.isEmpty) {
+                          return _buildEmptyState();
+                        }
 
-                    return ListView.builder(
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      itemCount: docs.length,
-                      itemBuilder: (context, index) {
-                        var data = docs[index].data() as Map<String, dynamic>;
-                        return ReimburseCardItem(
-                          id: docs[index].id,
-                          data: data,
-                          imageCache: _imageCache,
+                        return ListView.builder(
+                          physics: const BouncingScrollPhysics(),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                          itemCount: docs.length,
+                          itemBuilder: (context, index) {
+                            var data = docs[index].data() as Map<String, dynamic>;
+                            return ReimburseCardItem(
+                              id: docs[index].id,
+                              data: data,
+                              imageCache: _imageCache,
+                              primaryNavy: primaryNavy,
+                            );
+                          },
                         );
                       },
-                    );
-                  },
+                    ),
+                  ],
                 ),
-              ],
+    );
+  }
+
+  Widget _buildNoGroupState() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children:[
+          Icon(Icons.group_off_rounded, size: 80, color: Colors.grey),
+          SizedBox(height: 15),
+          Text(
+            "Anda tidak terhubung dengan grup kas mana pun.",
+            style: TextStyle(color: Colors.grey, fontSize: 14),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children:[
+          Icon(Icons.request_quote_rounded, size: 80, color: Colors.grey.withValues(alpha: 0.5)),
+          const SizedBox(height: 15),
+          const Text(
+            "Belum ada pengajuan reimburse.",
+            style: TextStyle(color: Colors.grey, fontSize: 16, fontWeight: FontWeight.w500),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(String error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(30),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children:[
+            const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 60),
+            const SizedBox(height: 15),
+            const Text("Oops! Terjadi kesalahan.", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 8),
+            Text(
+              error.contains("index") 
+                ? "Database memerlukan sinkronisasi indeks. Silakan hubungi pengembang." 
+                : "Gagal memuat data.",
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, color: Colors.grey),
             ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -120,12 +185,14 @@ class ReimburseCardItem extends StatefulWidget {
   final String id;
   final Map<String, dynamic> data;
   final Map<String, Uint8List> imageCache;
+  final Color primaryNavy;
 
   const ReimburseCardItem({
     super.key,
     required this.id,
     required this.data,
     required this.imageCache,
+    required this.primaryNavy,
   });
 
   @override
@@ -139,35 +206,37 @@ class _ReimburseCardItemState extends State<ReimburseCardItem> {
     return NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0).format(value);
   }
 
-  // FUNGSI: Hanya ubah status, tidak input ke transaksi otomatis
+  // 🔥 FUNGSI YANG DIUBAH MENGGUNAKAN ERROR SERVICE
   Future<void> _handleStatusChange(bool val) async {
+    if (_isUpdating) return; // Mencegah klik ganda
+
     setState(() => _isUpdating = true);
     
     try {
-      // HANYA UPDATE STATUS DI DOKUMEN REIMBURSE
       await FirebaseFirestore.instance
           .collection('reimbursements')
           .doc(widget.id)
           .update({'status': val ? 'dibayar' : 'pending'});
 
+      // Matikan indikator loading SEBELUM memunculkan Pop-Up
+      if (mounted) setState(() => _isUpdating = false);
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(val ? "Ditandai sebagai Lunas" : "Status dikembalikan ke Pending"),
-            backgroundColor: val ? Colors.green : Colors.orange,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 1),
-          ),
+        // Panggil Pop-Up Sukses
+        await ErrorService.showSuccess(
+          context, 
+          val ? "Mantap! Pengajuan Reimburse telah ditandai sebagai LUNAS." 
+              : "Status pengajuan telah dikembalikan menjadi Pending."
         );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Gagal update status: $e"), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
+      // Matikan indikator loading SEBELUM memunculkan Pop-Up Error
       if (mounted) setState(() => _isUpdating = false);
+      
+      if (mounted) {
+        // Panggil Pop-Up Error
+        ErrorService.show(context, e);
+      }
     }
   }
 
@@ -175,13 +244,25 @@ class _ReimburseCardItemState extends State<ReimburseCardItem> {
     showDialog(
       context: context,
       builder: (context) => Scaffold(
-        backgroundColor: Colors.black.withValues(alpha: 0.9),
+        backgroundColor: Colors.black.withValues(alpha: 0.95),
         appBar: AppBar(
           backgroundColor: Colors.transparent,
+          elevation: 0,
           iconTheme: const IconThemeData(color: Colors.white),
+          actions:[
+            IconButton(
+              icon: const Icon(Icons.close_rounded),
+              onPressed: () => Navigator.pop(context),
+            )
+          ],
         ),
         body: Center(
-          child: InteractiveViewer(child: Image.memory(imageBytes)),
+          child: InteractiveViewer(
+            panEnabled: true,
+            minScale: 0.5,
+            maxScale: 4,
+            child: Image.memory(imageBytes),
+          ),
         ),
       ),
     );
@@ -192,77 +273,123 @@ class _ReimburseCardItemState extends State<ReimburseCardItem> {
     bool isPaid = widget.data['status'] == 'dibayar';
     String? photoBase64 = widget.data['url_bukti'];
 
-    // Decode Base64 dengan caching agar scroll lancar
+    // Decode Base64 dengan caching & try-catch (Anti crash jika string corrupt)
     Uint8List? imageBytes;
     if (photoBase64 != null && photoBase64.isNotEmpty) {
       if (widget.imageCache.containsKey(photoBase64)) {
         imageBytes = widget.imageCache[photoBase64];
       } else {
-        imageBytes = base64Decode(photoBase64);
-        widget.imageCache[photoBase64] = imageBytes;
+        try {
+          imageBytes = base64Decode(photoBase64);
+          widget.imageCache[photoBase64] = imageBytes;
+        } catch (e) {
+          debugPrint("Error decoding base64 image: $e");
+        }
       }
     }
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 15),
+      padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
         color: isPaid ? Colors.green[50]?.withValues(alpha: 0.4) : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))],
+        borderRadius: BorderRadius.circular(22),
+        border: isPaid ? Border.all(color: Colors.green.withValues(alpha: 0.3)) : null,
+        boxShadow:[
+          BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 5))
+        ],
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(12),
-        leading: GestureDetector(
-          onTap: () {
-            if (imageBytes != null) _showImagePreview(context, imageBytes);
-          },
-          child: Container(
-            width: 60, height: 60,
-            decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(12)),
-            clipBehavior: Clip.antiAlias,
-            child: imageBytes != null
-                ? Image.memory(imageBytes, fit: BoxFit.cover)
-                : const Icon(Icons.image_not_supported, color: Colors.grey),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children:[
+          // 1. Gambar Bukti
+          GestureDetector(
+            onTap: () {
+              if (imageBytes != null) _showImagePreview(context, imageBytes);
+            },
+            child: Container(
+              width: 65, 
+              height: 65,
+              decoration: BoxDecoration(
+                color: Colors.grey[100], 
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: Colors.grey.shade200)
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: imageBytes != null
+                  ? Image.memory(imageBytes, fit: BoxFit.cover)
+                  : const Center(child: Icon(Icons.image_not_supported_rounded, color: Colors.grey, size: 28)),
+            ),
           ),
-        ),
-        title: Text(
-          widget.data['nama_pengaju'] ?? "Anggota",
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _formatCurrency((widget.data['jumlah'] ?? 0).toDouble()),
-              style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF1A237E), fontSize: 14),
+          const SizedBox(width: 15),
+          
+          // 2. Info Teks (Expanded agar aman dari overflow)
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children:[
+                Text(
+                  widget.data['nama_pengaju'] ?? "Anggota",
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF2D3142)),
+                  maxLines: 1, 
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _formatCurrency((widget.data['jumlah'] ?? 0).toDouble()),
+                    style: TextStyle(fontWeight: FontWeight.w900, color: widget.primaryNavy, fontSize: 15),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  widget.data['keperluan'] ?? "-",
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  maxLines: 1, 
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
-            Text(
-              widget.data['keperluan'] ?? "-",
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-              maxLines: 1, overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(
-              height: 24, width: 24,
-              child: _isUpdating
-                  ? const CircularProgressIndicator(strokeWidth: 2, color: Colors.green)
-                  : Checkbox(
-                      value: isPaid,
-                      activeColor: Colors.green,
-                      onChanged: (val) => _handleStatusChange(val ?? false),
-                    ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              isPaid ? "LUNAS" : "BAYAR",
-              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: isPaid ? Colors.green : Colors.grey),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 10),
+          
+          // 3. Tombol Checkbox & Status
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children:[
+              SizedBox(
+                height: 32, 
+                width: 32,
+                child: _isUpdating
+                    ? const Padding(
+                        padding: EdgeInsets.all(6.0),
+                        child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.green),
+                      )
+                    : Transform.scale(
+                        scale: 1.2,
+                        child: Checkbox(
+                          value: isPaid,
+                          activeColor: Colors.green,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                          onChanged: (val) => _handleStatusChange(val ?? false),
+                        ),
+                      ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                isPaid ? "LUNAS" : "BAYAR",
+                style: TextStyle(
+                  fontSize: 10, 
+                  fontWeight: FontWeight.w800, 
+                  color: isPaid ? Colors.green : Colors.grey[500],
+                  letterSpacing: 0.5
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

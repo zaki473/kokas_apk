@@ -6,45 +6,47 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  Future<String?> registerUser(
-    String email,
-    String password,
-    String nama,
-  ) async {
-    try {
-      UserCredential res = await _auth
-          .createUserWithEmailAndPassword(
-            email: email,
-            password: password,
-          )
-          .timeout(const Duration(seconds: 10));
+  // Ubah tipe datanya dari Future<String?> menjadi Future<void>
+Future<void> registerUser(
+  String email,
+  String password,
+  String nama,
+) async {
+  try {
+    UserCredential res = await _auth
+        .createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        )
+        .timeout(const Duration(seconds: 10));
 
-      if (res.user != null) {
-        await _firestore.collection('users').doc(res.user!.uid).set({
-          'uid': res.user!.uid,
-          'name': nama,
-          'email': email,
-          'role': null,
-          'groupId': null,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      }
-
-      return null;
-    } on FirebaseAuthException catch (e) {
-      switch (e.code) {
-        case 'email-already-in-use':
-          return 'Email sudah digunakan';
-        case 'weak-password':
-          return 'Password terlalu lemah';
-        default:
-          return 'Registrasi gagal, coba lagi';
-      }
-    } catch (e) {
-      debugPrint("Register error: $e");
-      return 'Terjadi kesalahan sistem';
+    if (res.user != null) {
+      await _firestore.collection('users').doc(res.user!.uid).set({
+        'uid': res.user!.uid,
+        'name': nama,
+        'email': email,
+        'role': null,
+        'groupId': null,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
     }
+    // Hapus return null di sini
+  } on FirebaseAuthException catch (e) {
+    switch (e.code) {
+      case 'email-already-in-use':
+        throw 'Email sudah terdaftar. Silakan gunakan email lain.'; // GANTI RETURN JADI THROW
+      case 'weak-password':
+        throw 'Password terlalu lemah. Gunakan minimal 6 karakter.'; // GANTI RETURN JADI THROW
+      case 'invalid-email':
+        throw 'Format email tidak valid.'; // GANTI RETURN JADI THROW
+      default:
+        throw 'Registrasi gagal, coba lagi'; // GANTI RETURN JADI THROW
+    }
+  } catch (e) {
+    debugPrint("Register error: $e");
+    throw 'Terjadi kesalahan sistem'; // GANTI RETURN JADI THROW
   }
+}
 
   Future<Map<String, dynamic>?> loginUser(
     String email,

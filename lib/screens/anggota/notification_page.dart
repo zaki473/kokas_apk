@@ -38,15 +38,20 @@ class _NotificationPageState extends State<NotificationPage> {
           setState(() {
             _currentUid = user.uid;
             _userGroupId = userDoc['groupId'];
+            // Ambil waktu terakhir kali buka notif
             lastRead = prefs.getInt('last_read_${user.uid}') ?? 0;
             _isLoadingUser = false;
           });
+          // Update waktu baca sekarang agar saat buka berikutnya tidak merah lagi
           _updateLastRead();
         }
       }
     } catch (e) {
       if (!context.mounted) return;
       ErrorService.show(context, e);
+      if (mounted) {
+        setState(() => _isLoadingUser = false);
+      }
     }
   }
 
@@ -65,123 +70,140 @@ class _NotificationPageState extends State<NotificationPage> {
       appBar: AppBar(
         elevation: 0, 
         backgroundColor: primaryNavy,
-        title: const Text("Notifikasi", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        title: const Text("Notifikasi", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18)),
         centerTitle: true, 
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: _isLoadingUser 
         ? Center(child: CircularProgressIndicator(color: primaryNavy))
-        : Stack(
-            children: [
-              Container(
-                height: 60,
-                decoration: BoxDecoration(
-                  color: primaryNavy,
-                  borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
+        : _userGroupId == null || _userGroupId!.isEmpty
+          ? _buildNoGroupState() // Cegah query jika user belum punya grup
+          : Stack(
+              children:[
+                // Background biru di atas
+                Container(
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: primaryNavy,
+                    borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
+                  ),
                 ),
-              ),
-              StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('announcements')
-                    .where('groupId', isEqualTo: _userGroupId)
-                    .orderBy('tanggal', descending: true)
-                    .limit(30) // Batasi agar tidak berat
-                    .snapshots(),
-                builder: (context, snap) {
-                  if (snap.hasError) return _buildErrorState();
-                  if (!snap.hasData) return Center(child: CircularProgressIndicator(color: primaryNavy));
-                  
-                  final docs = snap.data!.docs;
-                  if (docs.isEmpty) return _buildEmptyState();
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('announcements')
+                      .where('groupId', isEqualTo: _userGroupId)
+                      .orderBy('tanggal', descending: true)
+                      .limit(30) // Batasi agar ringan
+                      .snapshots(),
+                  builder: (context, snap) {
+                    if (snap.hasError) return _buildErrorState(snap.error.toString());
+                    if (snap.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator(color: Colors.white));
+                    }
+                    
+                    final docs = snap.data?.docs ?? [];
+                    if (docs.isEmpty) return _buildEmptyState();
 
-                  return ListView.builder(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                    itemCount: docs.length,
-                    itemBuilder: (context, index) {
-                      final data = docs[index].data() as Map<String, dynamic>;
-                      final Timestamp tanggalTs = data['tanggal'] as Timestamp? ?? Timestamp.now();
-                      final String judul = data['judul'] ?? "Pesan Baru";
-                      final String isi = data['pesan'] ?? "";
-                      
-                      // Cek status berdasarkan timestamp Firestore vs SharedPreferences
-                      final bool sudahDibaca = tanggalTs.millisecondsSinceEpoch <= lastRead;
+                    return ListView.builder(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                      itemCount: docs.length,
+                      itemBuilder: (context, index) {
+                        final data = docs[index].data() as Map<String, dynamic>;
+                        final Timestamp tanggalTs = data['tanggal'] as Timestamp? ?? Timestamp.now();
+                        final String judul = data['judul'] ?? "Pesan Baru";
+                        final String isi = data['pesan'] ?? "";
+                        
+                        // Cek status berdasarkan timestamp Firestore vs SharedPreferences
+                        final bool sudahDibaca = tanggalTs.millisecondsSinceEpoch <= lastRead;
 
-                      return _buildNotificationCard(judul, isi, tanggalTs.toDate(), sudahDibaca);
-                    },
-                  );
-                },
-              ),
-            ],
-          ),
+                        return _buildNotificationCard(judul, isi, tanggalTs.toDate(), sudahDibaca);
+                      },
+                    );
+                  },
+                ),
+              ],
+            ),
     );
   }
 
+  // --- FIX OVERFLOW & PERFORMA: Ganti IntrinsicHeight dengan Border Side ---
   Widget _buildNotificationCard(String judul, String isi, DateTime tgl, bool sudahDibaca) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 15),
       decoration: BoxDecoration(
         color: Colors.white, 
         borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 4))
+        boxShadow:[
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 5))
         ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(18),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Indikator status baca
-              Container(
-                width: 6, 
+        child: Container(
+          // Gunakan Border kiri sebagai penanda warna (merah = belum dibaca)
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(
                 color: sudahDibaca ? Colors.transparent : Colors.redAccent,
+                width: 5,
               ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              judul, 
-                              style: TextStyle(
-                                fontWeight: sudahDibaca ? FontWeight.w600 : FontWeight.bold, 
-                                fontSize: 14, 
-                                color: primaryNavy
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (!sudahDibaca) 
-                            const Icon(Icons.circle, size: 8, color: Colors.redAccent),
-                        ],
+            ),
+          ),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children:[
+              // Header Judul dan Dot Merah
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children:[
+                  // Expanded agar teks panjang bisa wrap/titik-titik dan tidak nabrak
+                  Expanded(
+                    child: Text(
+                      judul, 
+                      style: TextStyle(
+                        fontWeight: sudahDibaca ? FontWeight.w600 : FontWeight.bold, 
+                        fontSize: 15, 
+                        color: primaryNavy
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        isi, 
-                        style: const TextStyle(fontSize: 13, color: Colors.black87, height: 1.4)
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Icon(Icons.access_time_rounded, size: 12, color: Colors.grey[400]),
-                          const SizedBox(width: 4),
-                          Text(
-                            DateFormat("dd MMM yyyy, HH:mm").format(tgl), 
-                            style: TextStyle(fontSize: 11, color: Colors.grey[500])
-                          ),
-                        ],
-                      ),
-                    ],
+                      maxLines: 2, // Maksimal 2 baris agar rapi
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
+                  if (!sudahDibaca) ...[
+                    const SizedBox(width: 10),
+                    Container(
+                      margin: const EdgeInsets.only(top: 4),
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Colors.redAccent,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 8),
+              
+              // Isi Pesan (Biarkan mengalir ke bawah secara natural sesuai panjang teks)
+              Text(
+                isi, 
+                style: const TextStyle(fontSize: 13, color: Colors.black87, height: 1.5),
+              ),
+              const SizedBox(height: 12),
+              
+              // Waktu
+              Row(
+                children:[
+                  Icon(Icons.access_time_rounded, size: 14, color: Colors.grey[400]),
+                  const SizedBox(width: 5),
+                  Text(
+                    DateFormat("dd MMM yyyy, HH:mm").format(tgl), 
+                    style: TextStyle(fontSize: 11, color: Colors.grey[500], fontWeight: FontWeight.w500)
+                  ),
+                ],
               ),
             ],
           ),
@@ -190,24 +212,59 @@ class _NotificationPageState extends State<NotificationPage> {
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
+  Widget _buildNoGroupState() {
+    return const Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.notifications_off_outlined, size: 70, color: Colors.grey[300]),
-          const SizedBox(height: 10),
-          const Text("Belum ada notifikasi baru.", style: TextStyle(color: Colors.grey)),
+        children:[
+          Icon(Icons.group_off_rounded, size: 80, color: Colors.grey),
+          SizedBox(height: 15),
+          Text(
+            "Anda belum tergabung di grup mana pun.",
+            style: TextStyle(color: Colors.grey, fontSize: 14),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildErrorState() {
-    return const Center(
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children:[
+          Icon(Icons.notifications_off_rounded, size: 80, color: Colors.grey.withValues(alpha: 0.5)),
+          const SizedBox(height: 15),
+          const Text(
+            "Belum ada pengumuman baru.", 
+            style: TextStyle(color: Colors.grey, fontSize: 16, fontWeight: FontWeight.w500)
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(String error) {
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(20),
-        child: Text("Gagal memuat notifikasi. Pastikan database sudah terindeks.", textAlign: TextAlign.center),
+        padding: const EdgeInsets.all(30),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children:[
+            const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 60),
+            const SizedBox(height: 15),
+            const Text("Oops! Terjadi kesalahan.", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 8),
+            Text(
+              error.contains("index") 
+                ? "Database memerlukan sinkronisasi indeks. Hubungi admin." 
+                : "Gagal memuat pengumuman.",
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,10 +1,10 @@
 import 'dart:convert';
-import 'dart:typed_data'; // Tambahan untuk efisiensi memory
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
-import '/services/error_service.dart'; // Pastikan path ini benar
+import '/services/error_service.dart';
 
 class VerifikasiBayarPage extends StatefulWidget {
   const VerifikasiBayarPage({super.key});
@@ -16,7 +16,6 @@ class VerifikasiBayarPage extends StatefulWidget {
 class _VerifikasiBayarPageState extends State<VerifikasiBayarPage> {
   String? _bendaharaGroupId;
   bool _isLoading = true;
-  // Cache untuk menyimpan bytes gambar agar tidak decode berulang-ulang
   final Map<String, Uint8List> _imageCache = {};
 
   @override
@@ -42,9 +41,10 @@ class _VerifikasiBayarPageState extends State<VerifikasiBayarPage> {
         }
       }
     } catch (e) {
-      if (!context.mounted) return;
-      ErrorService.show(context, e);
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        ErrorService.show(context, e);
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -52,12 +52,14 @@ class _VerifikasiBayarPageState extends State<VerifikasiBayarPage> {
     return NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0).format(value);
   }
 
-  // Helper untuk loading dialog agar tidak duplikasi code
   void _showLoadingDialog() {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
+      builder: (context) => const PopScope( // Ganti WillPopScope yang deprecated
+        canPop: false,
+        child: Center(child: CircularProgressIndicator(color: Colors.white)),
+      ),
     );
   }
 
@@ -67,18 +69,16 @@ class _VerifikasiBayarPageState extends State<VerifikasiBayarPage> {
     try {
       final firestore = FirebaseFirestore.instance;
       String gId = data['groupId'] ?? "";
-
-      if (gId.isEmpty) {
-        Navigator.pop(context);
-        _showSnackBar("Gagal: Data tidak valid!", Colors.red);
-        return;
-      }
-
       int nominal = (data['jumlah'] is num) ? (data['jumlah'] as num).toInt() : 0;
 
       await firestore.runTransaction((transaction) async {
-        transaction.update(firestore.collection('pembayaran').doc(docId), {'status': 'disetujui'});
+        // Update status pembayaran
+        transaction.update(firestore.collection('pembayaran').doc(docId), {
+          'status': 'disetujui',
+          'verified_at': FieldValue.serverTimestamp(),
+        });
 
+        // Catat sebagai pemasukan resmi di kas grup
         DocumentReference transRef = firestore.collection('transactions').doc();
         transaction.set(transRef, {
           'date': FieldValue.serverTimestamp(),
@@ -86,40 +86,204 @@ class _VerifikasiBayarPageState extends State<VerifikasiBayarPage> {
           'jumlah': nominal,
           'keterangan': 'Iuran: ${data['nama_pengirim']} (${data['bulan']})',
           'type': 'masuk',
+          'source': 'payment_verification', // Metadata tambahan
         });
       });
 
-      if (!context.mounted) return;
-      Navigator.pop(context);
-      ErrorService.showSuccess(context, "Pembayaran berhasil diverifikasi!");
+      if (!mounted) return;
+      Navigator.pop(context); // Tutup loading
+      ErrorService.showSuccess(context, "Verifikasi Berhasil!");
     } catch (e) {
-      if (!context.mounted) return;
-      Navigator.pop(context);
-      ErrorService.show(context, e);
+      if (mounted) {
+        Navigator.pop(context);
+        ErrorService.show(context, e);
+      }
     }
   }
 
   Future<void> _prosesTolak(String docId) async {
-    _showLoadingDialog(); // Tambahkan loading agar user tidak klik berkali-kali
+    _showLoadingDialog();
     try {
-      await FirebaseFirestore.instance.collection('pembayaran').doc(docId).update({'status': 'ditolak'});
-      if (!mounted) return;
-      Navigator.pop(context);
-      _showSnackBar("Pembayaran ditolak.", Colors.redAccent);
+      await FirebaseFirestore.instance.collection('pembayaran').doc(docId).update({
+        'status': 'ditolak',
+        'rejected_at': FieldValue.serverTimestamp(),
+      });
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Pembayaran telah ditolak"), backgroundColor: Colors.redAccent)
+        );
+      }
     } catch (e) {
-      if (!mounted) return;
-      Navigator.pop(context);
-      _showSnackBar("Gagal menolak data", Colors.red);
+      if (mounted) {
+        Navigator.pop(context);
+        ErrorService.show(context, e);
+      }
     }
   }
 
-  void _showSnackBar(String msg, Color color) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: color, behavior: SnackBarBehavior.floating),
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: const Color(0xFF1A237E),
+        title: const Text("Verifikasi", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                Container(
+                  height: 40,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF1A237E),
+                    borderRadius: BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
+                  ),
+                ),
+                Expanded(
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('pembayaran')
+                        .where('status', isEqualTo: 'pending')
+                        .where('groupId', isEqualTo: _bendaharaGroupId)
+                        .orderBy('tanggal_kirim', descending: false) // List tertua di atas (antrian)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                      
+                      var docs = snapshot.data!.docs;
+                      if (docs.isEmpty) return _buildEmptyState();
+
+                      return ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        itemCount: docs.length,
+                        itemBuilder: (context, index) {
+                          var data = docs[index].data() as Map<String, dynamic>;
+                          return _buildVerifCard(docs[index].id, data);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
     );
   }
 
+  Widget _buildVerifCard(String id, Map<String, dynamic> data) {
+    String photoBase64 = data['url_bukti'] ?? "";
+    Uint8List? imageBytes = photoBase64.isNotEmpty 
+        ? _imageCache.putIfAbsent(photoBase64, () => base64Decode(photoBase64))
+        : null;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 5))],
+      ),
+      child: Column(
+        children: [
+          ListTile(
+            contentPadding: const EdgeInsets.all(15),
+            leading: CircleAvatar(
+              backgroundColor: const Color(0xFF1A237E).withOpacity(0.1),
+              child: const Icon(Icons.person_outline, color: Color(0xFF1A237E)),
+            ),
+            title: Text(data['nama_pengirim'] ?? "Anggota", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            subtitle: Text("Iuran ${data['bulan']}", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(formatCurrency((data['jumlah'] ?? 0).toDouble()), 
+                  style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.green, fontSize: 15)),
+                const Text("Menunggu", style: TextStyle(fontSize: 10, color: Colors.orange, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+          if (imageBytes != null)
+            GestureDetector(
+              onTap: () => _showZoomImage(context, imageBytes),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 15),
+                height: 180,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(15),
+                  image: DecorationImage(
+                    image: MemoryImage(imageBytes),
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                child: Container(
+                  alignment: Alignment.bottomRight,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(15),
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.transparent, Colors.black.withOpacity(0.3)],
+                    ),
+                  ),
+                  child: const Icon(Icons.fullscreen, color: Colors.white),
+                ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.all(15),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextButton.icon(
+                    onPressed: () => _prosesTolak(id),
+                    icon: const Icon(Icons.close, size: 18),
+                    label: const Text("TOLAK", style: TextStyle(fontWeight: FontWeight.bold)),
+                    style: TextButton.styleFrom(foregroundColor: Colors.red),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _prosesTerima(context, id, data),
+                    icon: const Icon(Icons.check, size: 18),
+                    label: const Text("TERIMA", style: TextStyle(fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.verified_user_outlined, size: 80, color: Colors.grey[200]),
+          const SizedBox(height: 16),
+          const Text("Semua beres!", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+          Text("Tidak ada antrian verifikasi.", style: TextStyle(color: Colors.grey[400])),
+        ],
+      ),
+    );
+  }
+
+  // Fungsi Zoom tetap sama (sudah bagus)
   void _showZoomImage(BuildContext context, Uint8List imageBytes) {
     showDialog(
       context: context,
@@ -130,170 +294,20 @@ class _VerifikasiBayarPageState extends State<VerifikasiBayarPage> {
           alignment: Alignment.center,
           children: [
             InteractiveViewer(
-              panEnabled: true,
-              minScale: 0.5,
-              maxScale: 4.0,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(15),
                 child: Image.memory(imageBytes, fit: BoxFit.contain),
               ),
             ),
             Positioned(
-              top: 10,
-              right: 10,
+              top: 20, right: 20,
               child: CircleAvatar(
-                backgroundColor: Colors.black54,
-                child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: () => Navigator.pop(context),
-                ),
+                backgroundColor: Colors.white,
+                child: IconButton(icon: const Icon(Icons.close, color: Colors.black), onPressed: () => Navigator.pop(context)),
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8),
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: const Color(0xFF1A237E),
-        title: const Text("Verifikasi Pembayaran", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        centerTitle: true,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Stack(
-              children: [
-                Container(
-                  height: 80,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF1A237E),
-                    borderRadius: BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
-                  ),
-                ),
-                if (_bendaharaGroupId == null)
-                  const Center(child: Text("Gagal mengambil data grup"))
-                else
-                  StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('pembayaran')
-                        .where('status', isEqualTo: 'pending')
-                        .where('groupId', isEqualTo: _bendaharaGroupId)
-                        .snapshots(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                        return const Center(child: Text("Tidak ada pembayaran pending"));
-                      }
-
-                      return ListView.builder(
-                        padding: const EdgeInsets.all(20),
-                        itemCount: snapshot.data!.docs.length,
-                        itemBuilder: (context, index) {
-                          var doc = snapshot.data!.docs[index];
-                          var data = doc.data() as Map<String, dynamic>;
-                          return _buildVerifCard(doc.id, data);
-                        },
-                      );
-                    },
-                  ),
-              ],
-            ),
-    );
-  }
-
-  Widget _buildVerifCard(String id, Map<String, dynamic> data) {
-    String photoBase64 = data['url_bukti'] ?? "";
-    
-    // Logic Caching Image: Supaya tidak decode Base64 berulang-ulang saat scroll
-    Uint8List? imageBytes;
-    if (photoBase64.isNotEmpty) {
-      if (_imageCache.containsKey(photoBase64)) {
-        imageBytes = _imageCache[photoBase64];
-      } else {
-        imageBytes = base64Decode(photoBase64);
-        _imageCache[photoBase64] = imageBytes;
-      }
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
-      ),
-      child: Column(
-        children: [
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const CircleAvatar(backgroundColor: Color(0xFF1A237E), child: Icon(Icons.person, color: Colors.white)),
-            title: Text(data['nama_pengirim'] ?? "User", style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text("Iuran Bulan: ${data['bulan']}"),
-            trailing: Text(
-              formatCurrency((data['jumlah'] ?? 0).toDouble()),
-              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 16),
-            ),
-          ),
-          const SizedBox(height: 10),
-          if (imageBytes != null)
-            GestureDetector(
-              onTap: () => _showZoomImage(context, imageBytes!),
-              child: Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Image.memory(
-                      imageBytes,
-                      height: 150,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      // Tambahkan cacheHeight untuk mengurangi beban memori
-                      cacheHeight: 400, 
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.all(5),
-                      decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(8)),
-                      child: const Icon(Icons.zoom_in, color: Colors.white, size: 20),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          const SizedBox(height: 15),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => _prosesTolak(id),
-                  style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-                  child: const Text("TOLAK"),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () => _prosesTerima(context, id, data),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                  child: const Text("TERIMA", style: TextStyle(color: Colors.white)),
-                ),
-              ),
-            ],
-          )
-        ],
       ),
     );
   }

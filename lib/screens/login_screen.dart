@@ -146,142 +146,154 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               child: SafeArea(
-                child: Center(
-                  // Agar konten tetap di tengah jika layar besar
-                  child: SingleChildScrollView(
-                    physics:
-                        const BouncingScrollPhysics(), // Scroll lebih smooth di iOS/Android
-                    padding: const EdgeInsets.symmetric(horizontal: 30),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 40),
-                          const Icon(
-                            Icons.account_balance_wallet_rounded,
-                            size: 80,
-                            color: Colors.white,
-                          ),
-                          const SizedBox(height: 20),
-                          const Text(
-                            "KOKAS LOGIN",
-                            style: TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              letterSpacing: 2,
-                            ),
-                          ),
-                          const Text(
-                            "Kelola kas organisasi dengan aman",
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 50),
-
-                          _buildTextField(
-                            controller: _emailController,
-                            label: "Alamat Email",
-                            icon: Icons.email_outlined,
-                            validator: AppValidators.validateEmail,
-                            keyboardType: TextInputType.emailAddress,
-                            textInputAction: TextInputAction.next,
-                          ),
-                          const SizedBox(height: 20),
-
-                          _buildTextField(
-                            controller: _passwordController,
-                            label: "Password",
-                            icon: Icons.lock_outline,
-                            isPassword: true,
-                            obscureText: _obscurePassword,
-                            toggleObscure: () => setState(
-                              () => _obscurePassword = !_obscurePassword,
-                            ),
-                            validator: AppValidators.validatePassword,
-                            textInputAction: TextInputAction.done,
-                            onFieldSubmitted: (_) => _handleLogin(),
-                          ),
-                          const SizedBox(height: 40),
-
-                          SizedBox(
-                            width: double.infinity,
-                            height: 55,
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                foregroundColor: const Color(0xFF1A237E),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                elevation:
-                                    5, // Sedikit shadow agar lebih timbul
-                              ),
-                              onPressed: _isLoading ? null : _handleLogin,
-                              child: _isLoading
-                                  ? const SizedBox(
-                                      height: 20,
-                                      width: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 3,
-                                      ),
-                                    )
-                                  : const Text(
-                                      "MASUK SEKARANG",
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                            ),
-                          ),
-                          const SizedBox(height: 25),
-
-                          TextButton(
-                            onPressed: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const RegisterScreen(),
-                              ),
-                            ),
-                            child: RichText(
-                              text: const TextSpan(
-                                text: "Belum punya akun? ",
-                                style: TextStyle(color: Colors.white70),
+                // 🔥 LayoutBuilder & ConstrainedBox adalah kunci agar responsif bebas overflow
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight: constraints.maxHeight, // Memastikan tinggi minimal seukuran layar
+                        ),
+                        child: IntrinsicHeight(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 30),
+                            child: Form(
+                              key: _formKey,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center, // Pusatkan konten secara vertikal
                                 children: [
-                                  TextSpan(
-                                    text: "Daftar Disini",
+                                  const SizedBox(height: 40), // Ruang atas untuk layar kecil
+                                  const Icon(
+                                    Icons.account_balance_wallet_rounded,
+                                    size: 80,
+                                    color: Colors.white,
+                                  ),
+                                  const SizedBox(height: 20),
+                                  const Text(
+                                    "KOKAS LOGIN",
                                     style: TextStyle(
-                                      color: Colors.white,
+                                      fontSize: 28,
                                       fontWeight: FontWeight.bold,
-                                      decoration: TextDecoration.underline,
+                                      color: Colors.white,
+                                      letterSpacing: 2,
                                     ),
                                   ),
+                                  const Text(
+                                    "Kelola kas organisasi dengan aman",
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 50),
+
+                                  _buildTextField(
+                                    controller: _emailController,
+                                    label: "Alamat Email",
+                                    icon: Icons.email_outlined,
+                                    validator: AppValidators.validateEmail,
+                                    keyboardType: TextInputType.emailAddress,
+                                    textInputAction: TextInputAction.next,
+                                  ),
+                                  const SizedBox(height: 20),
+
+                                  _buildTextField(
+                                    controller: _passwordController,
+                                    label: "Password",
+                                    icon: Icons.lock_outline,
+                                    isPassword: true,
+                                    obscureText: _obscurePassword,
+                                    toggleObscure: () => setState(
+                                      () => _obscurePassword = !_obscurePassword,
+                                    ),
+                                    validator: AppValidators.validatePassword,
+                                    textInputAction: TextInputAction.done,
+                                    onFieldSubmitted: (_) => _handleLogin(),
+                                  ),
+                                  const SizedBox(height: 40),
+
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 55,
+                                    child: ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.white,
+                                        foregroundColor: const Color(0xFF1A237E),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(15),
+                                        ),
+                                        elevation: 5,
+                                      ),
+                                      onPressed: _isLoading ? null : _handleLogin,
+                                      child: _isLoading
+                                          ? const SizedBox(
+                                              height: 20,
+                                              width: 20,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 3,
+                                              ),
+                                            )
+                                          : const Text(
+                                              "MASUK SEKARANG",
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 25),
+
+                                  TextButton(
+                                    onPressed: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const RegisterScreen(),
+                                      ),
+                                    ),
+                                    child: RichText(
+                                      text: const TextSpan(
+                                        text: "Belum punya akun? ",
+                                        style: TextStyle(color: Colors.white70),
+                                        children: [
+                                          TextSpan(
+                                            text: "Daftar Disini",
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              decoration: TextDecoration.underline,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  
+                                  const Spacer(), // 🔥 Spacer ini akan mendorong tombol keluar ke area bawah secara natural
+
+                                  TextButton.icon(
+                                    onPressed: _showExitDialog,
+                                    icon: const Icon(
+                                      Icons.power_settings_new_rounded,
+                                      color: Colors.white54,
+                                      size: 20,
+                                    ),
+                                    label: const Text(
+                                      "Keluar Aplikasi",
+                                      style: TextStyle(color: Colors.white54),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 30), // Ruang bawah untuk layar kecil
                                 ],
                               ),
                             ),
                           ),
-                          const SizedBox(height: 40),
-
-                          TextButton.icon(
-                            onPressed: _showExitDialog,
-                            icon: const Icon(
-                              Icons.power_settings_new_rounded,
-                              color: Colors.white54,
-                              size: 20,
-                            ),
-                            label: const Text(
-                              "Keluar Aplikasi",
-                              style: TextStyle(color: Colors.white54),
-                            ),
-                          ),
-                          const SizedBox(height: 30),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
               ),
             ),

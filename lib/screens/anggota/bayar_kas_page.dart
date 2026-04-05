@@ -52,7 +52,6 @@ class _BayarKasPageState extends State<BayarKasPage> {
 
     _loadUserGroupId();
 
-    // Optimasi: Gunakan Timer.periodic tetap 1 detik, tapi setState seminimal mungkin
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) setState(() => _now = DateTime.now());
     });
@@ -72,7 +71,6 @@ class _BayarKasPageState extends State<BayarKasPage> {
   }
 
   Future<void> _pickImage() async {
-    // Pastikan ImageHelper melakukan kompresi yang cukup kuat
     String? img = await ImageHelper.pickAndCompress();
     if (img != null) {
       setState(() {
@@ -83,22 +81,14 @@ class _BayarKasPageState extends State<BayarKasPage> {
   }
 
   void _kirimPembayaran() async {
-    // 1. Validasi Deadline
-    if (DateTime.now().isAfter(widget.deadline)) {
-      _showSnackBar("Sudah melewati deadline pembayaran!", Colors.redAccent);
-      return;
-    }
-
-    // 2. Validasi Kelengkapan
     if (_base64Image == null) {
       _showSnackBar("Mohon lampirkan bukti transfer terlebih dahulu", Colors.orangeAccent);
       return;
     }
 
-    // 3. Validasi Group ID (Kritis untuk Production)
     if (_myGroupId == null || _myGroupId!.isEmpty) {
       _showSnackBar("Gagal mengidentifikasi grup Anda. Coba beberapa saat lagi.", Colors.red);
-      _loadUserGroupId(); // Re-try load
+      _loadUserGroupId();
       return;
     }
 
@@ -106,15 +96,14 @@ class _BayarKasPageState extends State<BayarKasPage> {
     
     try {
       final user = FirebaseAuth.instance.currentUser!;
-      // Gunakan ID unik per transaksi agar tidak terjadi tabrakan data (timestamp + uid)
       String docId = "${user.uid}_${widget.bulan}_${DateTime.now().millisecondsSinceEpoch}";
 
       await FirebaseFirestore.instance.collection('pembayaran').doc(docId).set({
         'uid_pengirim': user.uid,
-        'nama_pengirim': user.email, // Sebaiknya simpan DisplayName jika ada
+        'nama_pengirim': user.displayName ?? user.email, 
         'jumlah': widget.nominal,
         'bulan': widget.bulan,
-        'url_bukti': _base64Image, // Data Base64
+        'url_bukti': _base64Image, 
         'status': 'pending',
         'groupId': _myGroupId,
         'tanggal_kirim': FieldValue.serverTimestamp(),
@@ -122,13 +111,14 @@ class _BayarKasPageState extends State<BayarKasPage> {
 
       if (!mounted) return;
       Navigator.pop(context);
-      ErrorService.showSuccess(context, "Konfirmasi terkirim! Silakan tunggu verifikasi bendahara.");
+      // Mengasumsikan ErrorService punya method showSuccess
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Konfirmasi terkirim!"), backgroundColor: Colors.green)
+      );
     } catch (e) {
       ErrorService.show(context, e);
     } finally {
-      if (mounted) {
-        setState(() => _isUploading = false);
-      }
+      if (mounted) setState(() => _isUploading = false);
     }
   }
 
@@ -138,7 +128,7 @@ class _BayarKasPageState extends State<BayarKasPage> {
         content: Text(msg), 
         backgroundColor: color, 
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
@@ -156,12 +146,11 @@ class _BayarKasPageState extends State<BayarKasPage> {
     Duration sisa = widget.deadline.difference(_now);
     bool isExpired = _now.isAfter(widget.deadline);
 
-    // Proteksi agar user tidak keluar saat sedang upload
     return PopScope(
       canPop: !_isUploading,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) {
-          _showSnackBar("Mohon tunggu, sedang memproses pembayaran...", Colors.orange);
+          _showSnackBar("Mohon tunggu, sedang memproses...", Colors.orange);
         }
       },
       child: Scaffold(
@@ -175,14 +164,19 @@ class _BayarKasPageState extends State<BayarKasPage> {
         ),
         body: Stack(
           children: [
+            // Header Navy Background
             Container(
-              height: 100,
+              height: 60,
               decoration: BoxDecoration(
                 color: primaryNavy,
-                borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(30), 
+                  bottomRight: Radius.circular(30)
+                ),
               ),
             ),
             SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 25),
               child: Form(
                 key: _formKey,
@@ -216,32 +210,42 @@ class _BayarKasPageState extends State<BayarKasPage> {
     );
   }
 
+  // --- WIDGET HELPERS ---
+
   Widget _buildCountdownBox(bool isExpired, Duration sisa) {
     return Container(
-      padding: const EdgeInsets.all(15),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))],
       ),
       child: Row(
         children: [
-          Icon(Icons.timer_outlined, color: isExpired ? Colors.red : primaryNavy, size: 24),
-          const SizedBox(width: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isExpired ? Colors.red.withOpacity(0.1) : primaryNavy.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.timer_outlined, color: isExpired ? Colors.red : primaryNavy, size: 24),
+          ),
+          const SizedBox(width: 15),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isExpired ? "WAKTU HABIS" : "SISA WAKTU PEMBAYARAN",
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey[500]),
+                  isExpired ? "STATUS TAGIHAN" : "SISA WAKTU PEMBAYARAN",
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey[600], letterSpacing: 0.5),
                 ),
+                const SizedBox(height: 4),
                 Text(
                   isExpired 
-                    ? "Maaf, batas waktu pembayaran telah lewat." 
+                    ? "Masa pembayaran berakhir" 
                     : "${sisa.inDays} Hari  :  ${sisa.inHours % 24} Jam  :  ${sisa.inMinutes % 60} Menit",
                   style: TextStyle(
-                    fontSize: 14, 
+                    fontSize: 15, 
                     fontWeight: FontWeight.bold, 
                     color: isExpired ? Colors.red : Colors.black87
                   ),
@@ -263,29 +267,30 @@ class _BayarKasPageState extends State<BayarKasPage> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(25),
-          border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
+          border: Border.all(color: Colors.grey.withOpacity(0.2)),
         ),
         clipBehavior: Clip.antiAlias,
         child: _imageBytes == null
           ? Column(
               mainAxisAlignment: MainAxisAlignment.center, 
               children: [
-                Icon(Icons.add_a_photo_rounded, size: 48, color: Colors.grey[300]),
-                const SizedBox(height: 10),
-                Text("Ketuk untuk Lampirkan Bukti", style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+                Icon(Icons.cloud_upload_outlined, size: 50, color: Colors.grey[300]),
+                const SizedBox(height: 12),
+                Text("Lampirkan Bukti Transfer", style: TextStyle(color: Colors.grey[600], fontSize: 14, fontWeight: FontWeight.w500)),
+                Text("(JPG/PNG, Max 2MB)", style: TextStyle(color: Colors.grey[400], fontSize: 11)),
               ],
             )
           : Stack(
               fit: StackFit.expand,
               children: [
-                Image.memory(_imageBytes!, fit: BoxFit.cover, gaplessPlayback: true),
+                Image.memory(_imageBytes!, fit: BoxFit.contain, gaplessPlayback: true),
                 if (!_isUploading)
                   Positioned(
                     right: 12, top: 12,
                     child: CircleAvatar(
                       backgroundColor: Colors.black54,
                       child: IconButton(
-                        icon: const Icon(Icons.refresh_rounded, color: Colors.white, size: 20),
+                        icon: const Icon(Icons.edit_rounded, color: Colors.white, size: 20),
                         onPressed: _pickImage,
                       ),
                     ),
@@ -299,13 +304,13 @@ class _BayarKasPageState extends State<BayarKasPage> {
   Widget _buildHorizontalLoading() {
     return Column(
       children: [
-        Text("Sedang mengirim bukti pembayaran...", style: TextStyle(color: primaryNavy, fontSize: 12, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
+        Text("Sedang memproses pembayaran...", style: TextStyle(color: primaryNavy, fontSize: 13, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 15),
         ClipRRect(
           borderRadius: BorderRadius.circular(10),
           child: LinearProgressIndicator(
-            minHeight: 6,
-            backgroundColor: Colors.white,
+            minHeight: 8,
+            backgroundColor: Colors.grey[200],
             valueColor: AlwaysStoppedAnimation<Color>(primaryNavy),
           ),
         ),
@@ -314,34 +319,46 @@ class _BayarKasPageState extends State<BayarKasPage> {
   }
 
   Widget _buildSubmitButton(bool isExpired) {
-    return SizedBox(
-      width: double.infinity,
-      height: 60,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: primaryNavy,
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: Colors.grey[300],
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          elevation: 2,
-        ),
-        onPressed: isExpired ? null : _kirimPembayaran,
-        child: const Text("KIRIM KONFIRMASI", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+  return SizedBox(
+    width: double.infinity,
+    height: 60,
+    child: ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        // Jika telat, beri warna sedikit berbeda atau tetap navy
+        backgroundColor: isExpired ? Colors.orange[800] : primaryNavy, 
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        elevation: 0,
       ),
-    );
-  }
+      // Sekarang onPressed selalu aktif selama tidak sedang uploading
+      onPressed: _isUploading ? null : _kirimPembayaran, 
+      child: Text(
+        isExpired ? "BAYAR (TERLAMBAT)" : "KIRIM KONFIRMASI",
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.1),
+      ),
+    ),
+  );
+}
 
   Widget _buildInputField({required TextEditingController controller, required String label, required IconData icon}) {
-    return TextFormField(
-      controller: controller,
-      readOnly: true,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: primaryNavy, size: 22),
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
-        contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+    return Container(
+      decoration: BoxDecoration(
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: TextFormField(
+        controller: controller,
+        readOnly: true,
+        style: const TextStyle(fontWeight: FontWeight.bold),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: TextStyle(color: Colors.grey[600], fontSize: 14),
+          prefixIcon: Icon(icon, color: primaryNavy, size: 22),
+          filled: true,
+          fillColor: Colors.white,
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: Colors.grey.withOpacity(0.1))),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: primaryNavy.withOpacity(0.5))),
+          contentPadding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
+        ),
       ),
     );
   }
